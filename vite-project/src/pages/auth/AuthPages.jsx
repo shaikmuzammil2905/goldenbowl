@@ -67,6 +67,127 @@ const GoogleButton = ({ onClick }) => (
 const EmailButton = ({ onClick }) => <button type="button" className="auth-social email-btn" onClick={onClick}><Mail size={17} className="email-icon" /><span>Continue with Email</span></button>;
 const TextField = ({ icon: Icon, label, ...props }) => <label className="clean-field"><span className="field-label">{Icon && <Icon size={15} />} {label}</span><input {...props} /></label>;
 
+// ─── Email OTP sub-component (real Nodemailer SMTP flow) ───────────────────────
+function EmailOtpSection({ onLogin }) {
+  const [email, setEmail] = useState('');
+  const [emailOtp, setEmailOtp] = useState('');
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSendOtp = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmailOtpSent(true);
+      } else {
+        setError(data.message || 'Failed to send OTP. Please try again.');
+      }
+    } catch {
+      setError('Network error. Check your connection and try again.');
+    }
+    setLoading(false);
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), otp: emailOtp }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        onLogin({ email: email.trim(), name: data.data?.user?.name || email.split('@')[0] });
+      } else {
+        setError(data.message || 'Invalid or expired OTP. Try again.');
+        setEmailOtp('');
+      }
+    } catch {
+      setError('Verification failed. Check your connection.');
+    }
+    setLoading(false);
+  };
+
+  const handleOtpBoxChange = (e, i) => {
+    const v = e.target.value.replace(/\D/g, '');
+    const arr = (emailOtp + '      ').slice(0, 6).split('');
+    arr[i] = v;
+    setEmailOtp(arr.join('').trimEnd().slice(0, 6));
+    if (v && e.target.nextSibling) e.target.nextSibling.focus();
+  };
+
+  const ErrorBox = ({ msg }) => msg ? (
+    <p style={{ color: '#dc2626', fontSize: 12, margin: '0 0 8px', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
+      ⚠️ {msg}
+    </p>
+  ) : null;
+
+  if (!emailOtpSent) {
+    return (
+      <form className="clean-form" onSubmit={handleSendOtp}>
+        <TextField icon={Mail} label="Email Address" value={email}
+          onChange={(e) => { setEmail(e.target.value); setError(''); }}
+          placeholder="you@example.com" type="email" required />
+        <ErrorBox msg={error} />
+        <button type="submit" className="auth-primary gold-btn"
+          disabled={!email || loading}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {loading ? <><Loader2 size={16} className="animate-spin" /> Sending OTP...</> : <>✉️ Send OTP to Email →</>}
+        </button>
+        <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
+          A 6-digit code will be sent to your inbox via email
+        </p>
+      </form>
+    );
+  }
+
+  return (
+    <form className="clean-form" onSubmit={handleVerifyOtp}>
+      <p className="csi-otp-sent">
+        OTP sent to <strong>{email}</strong>
+        <br /><small style={{ color: '#94a3b8', fontWeight: 400 }}>Check your inbox (and spam folder)</small>
+      </p>
+      <div className="csi-otp-row">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <input key={i} className="csi-otp-box" maxLength={1}
+            value={emailOtp[i] || ''} inputMode="numeric"
+            autoFocus={i === 0}
+            onChange={(e) => handleOtpBoxChange(e, i)} />
+        ))}
+      </div>
+      <ErrorBox msg={error} />
+      <button type="submit" className="auth-primary gold-btn"
+        disabled={emailOtp.replace(/\s/g, '').length !== 6 || loading}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : <>✓ Verify &amp; Sign In</>}
+      </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+        <button type="button" className="csi-back-link"
+          onClick={() => { setEmailOtpSent(false); setEmailOtp(''); setError(''); }}>
+          ← Change email
+        </button>
+        <button type="button" className="csi-back-link" disabled={loading}
+          onClick={handleSendOtp} style={{ color: '#d97706' }}>
+          Resend OTP
+        </button>
+      </div>
+    </form>
+  );
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 export function CustomerSignUpPage() {
   const n = useNavigate();
   const [name, setName] = useState('');
@@ -104,8 +225,6 @@ export function CustomerSignUpPage() {
 export function CustomerSignInPage() {
   const n = useNavigate();
   const [mobile, setMobile] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [sent, setSent] = useState(false);
   const [mode, setMode] = useState('mobile');
@@ -118,17 +237,29 @@ export function CustomerSignInPage() {
     <Frame eyebrow="SIGN IN" title="Welcome Back">
       <p className="auth-desc">Sign in to order your favourite food bowls.</p>
       <button type="button" className="demo-login-btn" onClick={quickDemoLogin}>⚡ 1-Click Demo Login (Priya Sharma)</button>
+
+      {/* Tab switcher */}
       <div className="csi-tabs">
-        <button type="button" className={`csi-tab${mode === 'mobile' ? ' csi-tab-active' : ''}`} onClick={() => { setMode('mobile'); setSent(false); setOtp(''); }}>📱 Mobile OTP</button>
-        <button type="button" className={`csi-tab${mode === 'email' ? ' csi-tab-active' : ''}`} onClick={() => { setMode('email'); setSent(false); }}>✉️ Email Login</button>
+        <button type="button" className={`csi-tab${mode === 'mobile' ? ' csi-tab-active' : ''}`}
+          onClick={() => { setMode('mobile'); setSent(false); setOtp(''); }}>
+          📱 Mobile OTP
+        </button>
+        <button type="button" className={`csi-tab${mode === 'email' ? ' csi-tab-active' : ''}`}
+          onClick={() => setMode('email')}>
+          ✉️ Email OTP
+        </button>
       </div>
+
+      {/* Mobile OTP */}
       {mode === 'mobile' && !sent && (
-        <form className="clean-form" onSubmit={(e) => { e.preventDefault(); if (mobileOk) { setSent(true); } }}>
+        <form className="clean-form" onSubmit={(e) => { e.preventDefault(); if (mobileOk) setSent(true); }}>
           <label className="clean-field">
             <span className="field-label"><Phone size={15} /> Mobile Number</span>
             <div className="csi-mobile-field">
               <span className="csi-prefix">🇮🇳 +91</span>
-              <input className="csi-mobile-input" value={mobile} onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Enter 10-digit mobile" inputMode="numeric" autoComplete="tel" />
+              <input className="csi-mobile-input" value={mobile}
+                onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="Enter 10-digit mobile" inputMode="numeric" autoComplete="tel" />
             </div>
           </label>
           <button type="submit" className="auth-primary gold-btn" disabled={!mobileOk}>Send Mobile OTP →</button>
@@ -139,7 +270,8 @@ export function CustomerSignInPage() {
           <p className="csi-otp-sent">OTP sent to <strong>+91 {mobile}</strong></p>
           <div className="csi-otp-row">
             {[0, 1, 2, 3, 4, 5].map((i) => (
-              <input key={i} className="csi-otp-box" maxLength={1} value={otp[i] || ''} inputMode="numeric" onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); const arr = otp.split(''); arr[i] = v; setOtp(arr.join('').slice(0, 6)); if (v && e.target.nextSibling) e.target.nextSibling.focus(); }} />
+              <input key={i} className="csi-otp-box" maxLength={1} value={otp[i] || ''} inputMode="numeric"
+                onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); const arr = otp.split(''); arr[i] = v; setOtp(arr.join('').slice(0, 6)); if (v && e.target.nextSibling) e.target.nextSibling.focus(); }} />
             ))}
           </div>
           <p className="csi-otp-hint">Prototype OTP: <strong>123456</strong></p>
@@ -147,15 +279,20 @@ export function CustomerSignInPage() {
           <button type="button" className="csi-back-link" onClick={() => { setSent(false); setOtp(''); }}>← Change number</button>
         </form>
       )}
+
+      {/* Email OTP — real SMTP via Nodemailer */}
       {mode === 'email' && (
-        <form className="clean-form" onSubmit={(e) => { e.preventDefault(); if (email && password) { authStorage.setCustomerAuth({ email, role: 'customer' }); n('/customer/home'); } }}>
-          <TextField icon={Mail} label="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" type="email" required />
-          <TextField icon={CreditCard} label="Password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" type="password" required />
-          <button type="submit" className="auth-primary gold-btn" disabled={!email || !password}>Sign In with Email →</button>
-        </form>
+        <EmailOtpSection onLogin={(userData) => {
+          authStorage.setCustomerAuth({ email: userData.email, name: userData.name, role: 'customer' });
+          n('/customer/home');
+        }} />
       )}
+
       <div className="auth-divider"><span>or continue with</span></div>
-      <div className="auth-social-stack"><GoogleButton onClick={quickDemoLogin} /><EmailButton onClick={() => setMode('email')} /></div>
+      <div className="auth-social-stack">
+        <GoogleButton onClick={quickDemoLogin} />
+        <EmailButton onClick={() => setMode('email')} />
+      </div>
       <p className="auth-switch-text">New to Bowl? <Link to="/customer/signup">Create an account</Link></p>
     </Frame>
   );
@@ -310,26 +447,25 @@ export function DeliveryFeePage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
         <h2 style={{ margin: 0 }}>Partner Kit &amp; Fee</h2>
         {isReduced && (
-          <span style={{ 
-            background: isFree ? '#dcfce7' : '#fef08a', 
-            color: isFree ? '#15803d' : '#854d0e', 
-            padding: '3px 8px', 
-            borderRadius: 6, 
-            fontSize: 10, 
-            fontWeight: 900 
+          <span style={{
+            background: isFree ? '#dcfce7' : '#fef08a',
+            color: isFree ? '#15803d' : '#854d0e',
+            padding: '3px 8px',
+            borderRadius: 6,
+            fontSize: 10,
+            fontWeight: 900
           }}>
             {isFree ? '🎉 100% FEE WAIVED' : `🔥 ${discountPercent}% DISCOUNT`}
           </span>
         )}
       </div>
-      
+
       <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 14px' }}>
-        {isFree 
+        {isFree
           ? 'Onboarding fee waived by Admin promo! Includes free kit & background check.'
           : 'One-time onboarding fee includes Golden Bowl Delivery Bag & Uniform T-shirt.'}
       </p>
-      
-      {/* Promo banner notice */}
+
       {deliverySettings?.promoNotice && (
         <div style={{
           background: isFree ? '#ecfdf5' : '#fff9ec',
@@ -387,15 +523,15 @@ export function DeliveryFeePage() {
         </div>
       </div>
 
-      <button 
-        type="button" 
-        className="auth-primary gold-btn" 
+      <button
+        type="button"
+        className="auth-primary gold-btn"
         onClick={pay}
         disabled={loading}
-        style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           gap: 8,
           background: isFree ? 'linear-gradient(135deg, #16a34a, #22c55e)' : undefined
         }}

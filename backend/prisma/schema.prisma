@@ -242,3 +242,15 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  email     String
+  otp       String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@map("otp_codes")
+}
