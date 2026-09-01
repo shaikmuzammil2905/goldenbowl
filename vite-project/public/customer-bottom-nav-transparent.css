@@ -1,0 +1,12 @@
+/* Customer bottom navigation: keep the selected item transparent so the Lucide icon stays clean and outlined. */
+.customer-bottom-nav a.active {
+  background: transparent !important;
+  color: var(--gold-dark, #9d731d) !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+}
+
+.customer-bottom-nav a.active svg {
+  fill: none !important;
+  stroke: currentColor !important;
+}

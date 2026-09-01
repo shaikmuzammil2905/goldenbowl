@@ -1,0 +1,242 @@
+/* ── SHARED AUTH SCREEN ──────────────────────────────────────── */
+.auth-screen{width:100%;min-height:100%;background:#faf8f5;display:flex;align-items:center;justify-content:center;padding:16px 12px;box-sizing:border-box;overflow-y:auto}
+.auth-card{width:100%;max-width:390px;background:#ffffff;border:1px solid #eee5d5;border-radius:20px;padding:22px 20px 24px;box-shadow:0 8px 28px rgba(60,45,15,.07);box-sizing:border-box;margin:auto;display:flex;flex-direction:column}
+.mobile-app-shell .auth-screen{min-height:100%;padding:12px;background:#faf8f5;display:flex;align-items:center;justify-content:center}
+.mobile-app-shell .auth-card{width:100%;border-radius:18px;padding:20px 18px 22px;box-shadow:none;margin:auto}
+
+/* ── HEADER / BRAND ──────────────────────────────────────────── */
+.auth-header-row{display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.auth-back{display:none}
+.eyebrow{font-size:8px;font-weight:900;letter-spacing:1px;background:#fff5da;color:#9b6d12;padding:3px 8px;border-radius:6px;text-transform:uppercase}
+.auth-brand-centered{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;margin:4px 0 12px}
+.auth-large-logo{width:60px;height:60px;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(157,115,29,.18));margin-bottom:7px}
+.auth-brand-centered strong{font-size:13px;font-weight:900;color:#1c1917;letter-spacing:.8px}
+.auth-brand-centered small{font-size:8.5px;font-weight:800;color:#a16207;letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+.auth-title-clean{font-size:19px;font-weight:800;color:#1c1917;text-align:center;margin:6px 0 4px;letter-spacing:-.3px}
+.auth-desc{font-size:11px;line-height:1.5;color:#78716c;text-align:center;margin:0 0 12px}
+.demo-login-btn{width:100%;background:#fffdf2;border:1px solid #fde047;color:#854d0e;font-size:11px;font-weight:800;padding:9px 12px;border-radius:12px;margin-bottom:12px;cursor:pointer;box-shadow:0 2px 8px rgba(245,158,11,.08);transition:all .15s ease}
+.demo-login-btn:hover{background:#fef08a}
+.clean-form{display:flex;flex-direction:column;gap:12px}
+.clean-field{display:flex;flex-direction:column;gap:5px;text-align:left}
+.field-label{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;color:#44403c}
+.field-label svg{color:#ca8a04}
+.clean-field input,.clean-field select{width:100%;height:44px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff;padding:0 14px;outline:0;color:#1c1917;font-size:12.5px;box-sizing:border-box;transition:border-color .15s ease}
+.clean-field input:focus,.clean-field select:focus{border-color:#ca8a04;box-shadow:0 0 0 3px rgba(202,138,4,.10)}
+.auth-primary{width:100%;height:46px;min-height:46px;border:0;border-radius:12px;background:#1c1917;color:#ffffff;font-size:12.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;margin-top:2px;transition:all .15s ease;text-decoration:none}
+.auth-primary.gold-btn{background:#dfa500;color:#ffffff;box-shadow:0 4px 12px rgba(223,165,0,.22)}
+.auth-primary.gold-btn:hover{background:#ca9500}
+.auth-primary.auth-paid-btn{background:#16a34a;color:#ffffff;box-shadow:0 4px 12px rgba(22,163,74,.2);pointer-events:none}
+.auth-primary:disabled{opacity:.4;cursor:not-allowed}
+.auth-social{width:100%;height:44px;min-height:44px;border:1.5px solid #e2e8f0;background:#ffffff;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;gap:10px;font-size:12px;font-weight:800;color:#334155;cursor:pointer;transition:all .15s ease;padding:0 16px;box-shadow:0 2px 6px rgba(0,0,0,.03)}
+.auth-social:hover{border-color:#dfa500;background:#fffdf7;transform:translateY(-1px);box-shadow:0 4px 12px rgba(223,165,0,.15)}
+.auth-divider{display:flex;align-items:center;gap:10px;color:#a8a29e;font-size:9.5px;margin:10px 0}
+.auth-divider:before,.auth-divider:after{content:"";height:1px;background:#e7e5e4;flex:1}
+.auth-social-stack{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.auth-switch-text{text-align:center;font-size:10.5px;color:#78716c;margin:14px 0 0}
+.auth-switch-text a{color:#ca8a04;font-weight:800;text-decoration:none}
+.auth-error{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;padding:9px 12px;border-radius:10px;font-size:10.5px}
+.auth-check{display:flex;align-items:flex-start;gap:9px;font-size:11px;color:#44403c;margin:10px 0;cursor:pointer;line-height:1.5}
+.auth-check input[type="checkbox"]{width:16px;height:16px;min-width:16px;accent-color:#dfa500;margin-top:1px;cursor:pointer}
+.auth-check span{flex:1}
+
+/* ── RESPONSIVE ──────────────────────────────────────────────── */
+@media(max-width:600px){
+  .auth-card{max-width:100%;padding:18px 16px 20px}
+  .auth-title-clean{font-size:17px}
+  .clean-field input,.clean-field select,.auth-primary,.auth-social{height:42px}
+
+  /* Customer mobile number: the wrapper owns the border; input has none. */
+  .mobile-app-shell .csi-mobile-field{width:100%;height:50px;display:flex;align-items:stretch;border:1.5px solid #e2e8f0;border-radius:13px;overflow:hidden;background:#fff;box-sizing:border-box}
+  .mobile-app-shell .csi-mobile-field:focus-within{border-color:#ca8a04;box-shadow:0 0 0 3px rgba(202,138,4,.10)}
+  .mobile-app-shell .csi-prefix{flex:0 0 auto;display:flex;align-items:center;padding:0 10px;background:#fafaf9;border-right:1px solid #e7e5e4;color:#44403c;font-size:12px;font-weight:800;white-space:nowrap}
+  .mobile-app-shell .clean-field input.csi-mobile-input{flex:1;min-width:0;width:1px;height:100% !important;min-height:0 !important;border:0 !important;border-radius:0 !important;outline:0 !important;box-shadow:none !important;padding:0 12px !important;font-size:16px !important;line-height:normal !important;background:transparent !important;box-sizing:border-box}
+  .mobile-app-shell .clean-field input.csi-mobile-input:focus{border:0 !important;outline:0 !important;box-shadow:none !important}
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DELIVERY PARTNER PREMIUM STYLES
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Layout: full-screen scrollable container */
+.dp-auth-screen{height:100%;display:flex;flex-direction:column;overflow:hidden;background:#f8f7f4}
+
+/* ── STICKY HEADER (onboarding) ──────────────────────────────── */
+.dp-auth-top{flex-shrink:0;background:#1a1208;padding:14px 18px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+.dp-auth-hero{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.dp-auth-hero-left{display:flex;align-items:center;gap:10px}
+.dp-auth-logo{width:36px;height:36px;object-fit:contain;border-radius:10px;background:rgba(255,255,255,.1);padding:4px}
+.dp-auth-hero-text strong{display:block;font-size:13px;font-weight:900;color:#ffffff;letter-spacing:.4px}
+.dp-auth-hero-text small{font-size:9.5px;font-weight:600;color:#dfa500;letter-spacing:.5px;text-transform:uppercase}
+.dp-auth-hero-badge{font-size:28px;line-height:1}
+
+/* progress bar */
+.dp-auth-progress-track{height:4px;background:rgba(255,255,255,.12);border-radius:2px;margin:0 0 10px}
+.dp-auth-progress-fill{height:100%;background:linear-gradient(90deg,#dfa500,#f5c518);border-radius:2px;transition:width .4s cubic-bezier(.4,0,.2,1)}
+
+/* step label row */
+.dp-auth-step-row{display:flex;align-items:center;gap:8px;padding-bottom:12px}
+.dp-auth-step-chip{background:#dfa500;color:#1a1208;font-size:9px;font-weight:900;padding:2px 7px;border-radius:20px;letter-spacing:.5px;white-space:nowrap}
+.dp-auth-step-name{font-size:11px;font-weight:700;color:rgba(255,255,255,.75);letter-spacing:.2px}
+
+/* ── SCROLLABLE BODY ─────────────────────────────────────────── */
+.dp-auth-body{flex:1;overflow-y:auto;padding:20px 18px 80px;-webkit-overflow-scrolling:touch}
+.dp-auth-body::-webkit-scrollbar{width:3px}
+.dp-auth-body::-webkit-scrollbar-thumb{background:#e2d8c8;border-radius:2px}
+
+/* ── STEP CONTENT ────────────────────────────────────────────── */
+.dp-step-content{display:flex;flex-direction:column;gap:16px}
+.dp-step-title{font-size:20px;font-weight:900;color:#1c1917;margin:0;letter-spacing:-.3px;line-height:1.2}
+
+/* ── BUTTON ROW ──────────────────────────────────────────────── */
+.dp-btn-row{display:flex;gap:10px;margin-top:4px}
+.dp-btn-row .auth-social{flex:1;height:44px;font-size:11px;border-radius:12px}
+.dp-btn-row .auth-primary{flex:2;margin-top:0}
+
+/* ── FEE INFO (inline step) ──────────────────────────────────── */
+.dp-fee-info{background:#ffffff;border:1px solid #eee4d2;border-radius:18px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 4px 16px rgba(60,45,15,.06)}
+.dp-fee-amount{display:flex;align-items:center;gap:10px;color:#1c1917}
+.dp-fee-amount svg{color:#dfa500}
+.dp-fee-amount span{font-size:36px;font-weight:900;color:#1c1917;letter-spacing:-1px}
+.dp-fee-note{font-size:10.5px;color:#78716c;text-align:center;line-height:1.5;margin:0}
+
+/* ═══════════════════════════════════════════════════════════════
+   DELIVERY SIGN-IN PAGE — HERO LAYOUT
+   ═══════════════════════════════════════════════════════════════ */
+.dp-signin-hero{background:linear-gradient(145deg,#1a1208 60%,#2d1f08);padding:28px 20px 24px;flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between;position:relative;overflow:hidden}
+.dp-signin-hero::after{content:"";position:absolute;bottom:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(223,165,0,.08)}
+.dp-signin-hero-inner{display:flex;align-items:center;gap:14px;z-index:1;position:relative}
+.dp-signin-hero-icon{font-size:38px;line-height:1;filter:drop-shadow(0 4px 8px rgba(0,0,0,.3))}
+.dp-signin-hero-title{font-size:22px;font-weight:900;color:#ffffff;margin:0 0 4px;line-height:1.15;letter-spacing:-.4px}
+.dp-signin-hero-sub{font-size:11px;color:rgba(255,255,255,.6);margin:0;font-weight:500}
+.dp-signin-hero-logo{width:44px;height:44px;object-fit:contain;border-radius:12px;background:rgba(255,255,255,.08);padding:6px;position:relative;z-index:1}
+
+/* ── DEMO BUTTON (delivery) ──────────────────────────────────── */
+.dp-demo-btn{width:100%;padding:13px;background:linear-gradient(135deg,#dfa500,#f5c518);border:0;border-radius:14px;font-size:13px;font-weight:800;color:#1a1208;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 16px rgba(223,165,0,.35);transition:all .18s ease;letter-spacing:.2px}
+.dp-demo-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(223,165,0,.45)}
+.dp-demo-btn:active{transform:translateY(0)}
+
+/* ── OR DIVIDER ──────────────────────────────────────────────── */
+.dp-or-row{display:flex;align-items:center;gap:10px;margin:14px 0}
+.dp-or-row:before,.dp-or-row:after{content:"";flex:1;height:1px;background:#e7e5e4}
+.dp-or-row span{font-size:10px;color:#a8a29e;font-weight:600;white-space:nowrap}
+
+/* ── MOBILE FIELD ────────────────────────────────────────────── */
+.dp-mobile-field{display:flex;align-items:center;border:1.5px solid #e2e8f0;border-radius:14px;overflow:hidden;background:#ffffff;transition:border-color .15s ease}
+.dp-mobile-field:focus-within{border-color:#dfa500;box-shadow:0 0 0 3px rgba(223,165,0,.12)}
+.dp-mobile-prefix{padding:0 12px;font-size:12px;font-weight:700;color:#44403c;background:#faf8f5;border-right:1px solid #e2e8f0;height:48px;display:flex;align-items:center;white-space:nowrap;flex-shrink:0}
+.dp-mobile-input{flex:1;height:48px;border:0;outline:0;padding:0 14px;font-size:14px;color:#1c1917;background:transparent;font-weight:500}
+
+/* ── OTP BOX ROW ─────────────────────────────────────────────── */
+.dp-otp-hint{font-size:11px;color:#78716c;text-align:center;margin:0}
+.dp-otp-hint strong{color:#1c1917}
+.dp-otp-row{display:flex;gap:8px;justify-content:center}
+.dp-otp-box{width:40px;height:48px;border:1.5px solid #e2e8f0;border-radius:12px;text-align:center;font-size:18px;font-weight:800;color:#1c1917;background:#ffffff;outline:0;transition:all .15s ease;caret-color:#dfa500}
+.dp-otp-box:focus{border-color:#dfa500;box-shadow:0 0 0 3px rgba(223,165,0,.15);background:#fffdf7}
+.dp-otp-proto{font-size:10px;color:#a8a29e;text-align:center;margin:0}
+.dp-otp-proto strong{color:#78716c}
+
+/* ── CTA BUTTON (delivery) ───────────────────────────────────── */
+.dp-cta-btn{width:100%;height:48px;border:0;border-radius:14px;background:#1c1917;color:#ffffff;font-size:13.5px;font-weight:800;letter-spacing:.3px;cursor:pointer;transition:all .15s ease;display:flex;align-items:center;justify-content:center;gap:6px}
+.dp-cta-btn:hover{background:#2d2820}
+.dp-cta-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── BACK LINK ───────────────────────────────────────────────── */
+.dp-back-link{background:0;border:0;color:#78716c;font-size:10.5px;font-weight:700;cursor:pointer;text-align:center;width:100%;padding:6px}
+.dp-back-link:hover{color:#ca8a04}
+
+/* ═══════════════════════════════════════════════════════════════
+   DELIVERY PARTNER — GOLD STATUS BAR
+   ═══════════════════════════════════════════════════════════════ */
+.dp-status-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 16px 4px;background:transparent;user-select:none;width:100%;box-sizing:border-box}
+.dp-status-time{font-size:11px;font-weight:900;color:#f5c518;letter-spacing:.5px}
+.dp-status-right{display:flex;align-items:center;gap:5px;color:#dfa500}
+.dp-status-net{font-size:9px;font-weight:900;color:#f5c518;letter-spacing:.5px}
+.dp-status-right svg{color:#dfa500;opacity:.9}
+.dp-status-battery{display:inline-flex;align-items:center;gap:2px;background:rgba(22,163,74,.18);color:#4ade80;padding:1px 5px;border-radius:5px;font-size:8.5px;font-weight:900}
+.dp-status-battery svg{color:#4ade80}
+
+/* Make signin hero flex-column so status bar is above hero content */
+.dp-signin-hero{flex-direction:column;padding:0}
+.dp-signin-hero .dp-status-bar{background:rgba(0,0,0,.15);padding:7px 16px 5px}
+.dp-signin-hero-content{display:flex;align-items:flex-start;justify-content:space-between;padding:16px 20px 22px;width:100%;box-sizing:border-box}
+
+/* ═══════════════════════════════════════════════════════════════
+   CUSTOMER SIGN-IN PAGE — PREMIUM LAYOUT
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Full-screen layout */
+.csi-screen{height:100%;display:flex;flex-direction:column;overflow:hidden;background:#fdf8ef}
+
+/* ── HERO ────────────────────────────────────────────────────── */
+.csi-hero{background:linear-gradient(160deg,#1c1208 0%,#3b2200 55%,#5c3600 100%);padding:36px 24px 52px;flex-shrink:0;position:relative;overflow:hidden}
+.csi-hero-glow{position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:240px;height:240px;background:radial-gradient(circle,rgba(245,197,24,.22) 0%,transparent 70%);pointer-events:none}
+.csi-hero-content{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px}
+.csi-hero-emoji{font-size:52px;line-height:1;filter:drop-shadow(0 8px 16px rgba(0,0,0,.4));animation:csiFloat 3s ease-in-out infinite}
+@keyframes csiFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.csi-hero-title{font-size:26px;font-weight:900;color:#ffffff;margin:0;letter-spacing:-.5px;line-height:1.1}
+.csi-hero-sub{font-size:12px;color:rgba(255,255,255,.6);margin:0;font-weight:500}
+
+/* ── FORM SHEET ──────────────────────────────────────────────── */
+.csi-sheet{flex:1;overflow-y:auto;background:#ffffff;border-radius:24px 24px 0 0;margin-top:-20px;padding:22px 20px 40px;position:relative;z-index:2;box-shadow:0 -8px 32px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:14px}
+.csi-sheet::-webkit-scrollbar{width:3px}
+.csi-sheet::-webkit-scrollbar-thumb{background:#e2d8c8;border-radius:2px}
+
+/* ── DEMO BUTTON ─────────────────────────────────────────────── */
+.csi-demo-btn{width:100%;padding:12px;background:linear-gradient(135deg,#dfa500,#f5c518);border:0;border-radius:14px;font-size:13px;font-weight:800;color:#1a1208;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 16px rgba(223,165,0,.35);transition:all .18s ease;letter-spacing:.2px}
+.csi-demo-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(223,165,0,.45)}
+
+/* ── TABS ────────────────────────────────────────────────────── */
+.csi-tabs{display:grid;grid-template-columns:1fr 1fr;gap:0;background:#f4ede0;border-radius:14px;padding:3px}
+.csi-tab{border:0;background:transparent;border-radius:11px;padding:9px 8px;font-size:12px;font-weight:700;color:#78716c;cursor:pointer;transition:all .2s ease}
+.csi-tab-active{background:#ffffff;color:#1c1917;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.10)}
+
+/* ── MOBILE INPUT ────────────────────────────────────────────── */
+.csi-mobile-field{display:flex;align-items:center;border:1.5px solid #e2e8f0;border-radius:14px;overflow:hidden;background:#ffffff;transition:border-color .15s ease}
+.csi-mobile-field:focus-within{border-color:#dfa500;box-shadow:0 0 0 3px rgba(223,165,0,.12)}
+.csi-prefix{padding:0 12px;font-size:12px;font-weight:700;color:#44403c;background:#faf8f5;border-right:1px solid #e2e8f0;height:50px;display:flex;align-items:center;white-space:nowrap;flex-shrink:0}
+.csi-mobile-input{flex:1;height:50px;border:0;outline:0;padding:0 14px;font-size:15px;color:#1c1917;background:transparent;font-weight:500}
+.csi-mobile-input::placeholder{color:#c0b8ae}
+
+/* ── OTP ─────────────────────────────────────────────────────── */
+.csi-otp-sent{font-size:11.5px;color:#78716c;text-align:center;margin:0}
+.csi-otp-sent strong{color:#1c1917;font-weight:800}
+.csi-otp-row{display:flex;gap:8px;justify-content:center}
+.csi-otp-box{width:42px;height:52px;border:1.5px solid #e2e8f0;border-radius:14px;text-align:center;font-size:20px;font-weight:800;color:#1c1917;background:#ffffff;outline:0;transition:all .15s ease;caret-color:#dfa500}
+.csi-otp-box:focus{border-color:#dfa500;box-shadow:0 0 0 3px rgba(223,165,0,.15);background:#fffdf7}
+.csi-otp-hint{font-size:10px;color:#a8a29e;text-align:center;margin:0}
+.csi-otp-hint strong{color:#78716c}
+
+/* ── CTA BUTTON ──────────────────────────────────────────────── */
+.csi-cta-btn{width:100%;height:50px;border:0;border-radius:14px;background:#1c1917;color:#ffffff;font-size:14px;font-weight:800;letter-spacing:.3px;cursor:pointer;transition:all .15s ease;display:flex;align-items:center;justify-content:center;gap:6px}
+.csi-cta-btn:hover:not(:disabled){background:#2d2820;transform:translateY(-1px)}
+.csi-cta-btn:disabled{opacity:.38;cursor:not-allowed}
+
+/* ── LINKS ───────────────────────────────────────────────────── */
+.csi-back-link{background:0;border:0;color:#78716c;font-size:11px;font-weight:700;cursor:pointer;text-align:center;width:100%;padding:4px}
+.csi-back-link:hover{color:#ca8a04}
+.csi-forgot{font-size:10.5px;color:#ca8a04;font-weight:700;text-decoration:none}
+.csi-forgot:hover{text-decoration:underline}
+
+/* ── ADMIN & TABLE CELL NEWLINE SAFETY POLISH ─────────────────── */
+.admin-action-btn{padding:5px 10px;border-radius:8px;border:1px solid #ca8a04;background:#fffdf0;color:#854d0e;font-size:10.5px;font-weight:800;cursor:pointer;white-space:nowrap;transition:all .15s ease;display:inline-flex;align-items:center;gap:4px}
+.admin-action-btn:hover{background:#ca8a04;color:#ffffff}
+.admin-primary-btn{padding:6px 12px;border-radius:8px;border:0;background:#1c1917;color:#ffffff;font-size:11px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.table-status{padding:4px 9px;border-radius:12px;font-size:9.5px;font-weight:800;text-transform:uppercase;white-space:nowrap;display:inline-block}
+.table-status.confirmed,.table-status.active{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
+.table-status.preparing{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+.table-status.ready_for_pickup{background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe}
+.table-status.assigned,.table-status.picked_up,.table-status.out_for_delivery{background:#ffedd5;color:#c2410c;border:1px solid #fed7aa}
+.table-status.delivered{background:#f3e8ff;color:#6b21a8;border:1px solid #e9d5ff}
+.table-status.inactive{background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb}
+
+th, td {
+  white-space: nowrap;
+}
+td strong {
+  white-space: nowrap;
+}
+.admin-table-card {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}

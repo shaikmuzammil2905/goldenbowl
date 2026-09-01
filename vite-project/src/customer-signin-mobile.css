@@ -1,0 +1,29 @@
+/* Customer sign-in mobile field polish. Loaded separately so auth.css remains untouched. */
+@media (max-width: 600px) {
+  .mobile-app-shell .auth-screen { width: 100%; min-width: 0; padding: 10px; overflow-x: hidden; }
+  .mobile-app-shell .auth-card { width: 100%; max-width: 100%; min-width: 0; padding: 18px 14px 22px; box-sizing: border-box; }
+  .mobile-app-shell .clean-form,
+  .mobile-app-shell .clean-field { width: 100%; min-width: 0; box-sizing: border-box; }
+  .mobile-app-shell .clean-field input,
+  .mobile-app-shell .clean-field select { width: 100%; min-width: 0; height: 48px; min-height: 48px; padding: 0 13px; font-size: 16px; box-sizing: border-box; }
+  .mobile-app-shell .clean-field input::placeholder { font-size: 14px; }
+  .mobile-app-shell .clean-field input:focus,
+  .mobile-app-shell .clean-field select:focus { box-shadow: 0 0 0 3px rgba(202,138,4,.11); }
+  .mobile-app-shell .auth-primary,
+  .mobile-app-shell .auth-social,
+  .mobile-app-shell .demo-login-btn { width: 100%; min-width: 0; min-height: 48px; height: 48px; box-sizing: border-box; }
+  .mobile-app-shell .csi-mobile-field { width: 100%; min-width: 0; height: 50px; display: flex; align-items: stretch; border: 1.5px solid #e2e8f0; border-radius: 13px; overflow: hidden; background: #fff; box-sizing: border-box; }
+  .mobile-app-shell .csi-mobile-field:focus-within { border-color: #ca8a04; box-shadow: 0 0 0 3px rgba(202,138,4,.11); }
+  .mobile-app-shell .csi-prefix { flex: 0 0 auto; display: flex; align-items: center; padding: 0 10px; background: #fafaf9; border-right: 1px solid #e7e5e4; color: #44403c; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  .mobile-app-shell .csi-mobile-input { flex: 1; min-width: 0; width: 1px; height: 100% !important; min-height: 0 !important; border: 0 !important; border-radius: 0 !important; outline: 0; box-shadow: none !important; padding: 0 12px !important; font-size: 16px !important; line-height: normal !important; background: transparent; box-sizing: border-box; }
+  .mobile-app-shell .csi-mobile-input::placeholder { font-size: 14px; }
+  .mobile-app-shell .csi-otp-row { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 6px; width: 100%; }
+  .mobile-app-shell .csi-otp-box { width: 100%; min-width: 0; height: 48px; padding: 0; border: 1.5px solid #e2e8f0; border-radius: 11px; text-align: center; font-size: 18px; font-weight: 800; box-sizing: border-box; outline: 0; }
+  .mobile-app-shell .csi-otp-box:focus { border-color: #ca8a04; box-shadow: 0 0 0 3px rgba(202,138,4,.11); }
+}
+@media (max-width: 360px) {
+  .mobile-app-shell .auth-card { padding-left: 11px; padding-right: 11px; }
+  .mobile-app-shell .csi-prefix { padding-left: 8px; padding-right: 8px; font-size: 11px; }
+  .mobile-app-shell .csi-mobile-input { padding-left: 9px !important; padding-right: 8px !important; }
+  .mobile-app-shell .csi-otp-row { gap: 4px; }
+}

@@ -1,0 +1,14 @@
+{
+  "git": {
+    "deploymentEnabled": true
+  },
+  "buildCommand": "npm --prefix vite-project run build",
+  "outputDirectory": "vite-project/dist",
+  "installCommand": "npm install --prefix vite-project",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

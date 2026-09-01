@@ -1,0 +1,75 @@
+/* Admin desktop layout: sidebar pinned, only workspace content scrolls. */
+@media (min-width: 701px) {
+  .admin-desktop-shell {
+    display: grid !important;
+    grid-template-columns: clamp(220px, 18vw, 320px) minmax(0, 1fr) !important;
+    width: 100% !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    overflow: hidden !important;
+  }
+
+  .admin-desktop-sidebar {
+    position: fixed !important;
+    inset: 0 auto 0 0 !important;
+    width: clamp(220px, 18vw, 320px) !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    z-index: 100 !important;
+  }
+
+  .admin-desktop-main {
+    grid-column: 2 !important;
+    width: 100% !important;
+    height: 100vh !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .admin-desktop-topbar {
+    flex: 0 0 auto !important;
+    position: relative !important;
+    z-index: 20 !important;
+  }
+
+  .admin-desktop-content {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+    overscroll-behavior: contain !important;
+  }
+
+  .admin-desktop-sidebar .admin-desktop-nav {
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+}
+
+@media (max-width: 900px) and (min-width: 701px) {
+  .admin-desktop-shell {
+    grid-template-columns: clamp(200px, 22vw, 260px) minmax(0, 1fr) !important;
+  }
+
+  .admin-desktop-sidebar {
+    width: clamp(200px, 22vw, 260px) !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .admin-desktop-shell,
+  .admin-desktop-sidebar,
+  .admin-desktop-main,
+  .admin-desktop-content {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+}

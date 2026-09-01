@@ -1,0 +1,244 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  SUPPORT
+  DELIVERY
+  CUSTOMER
+}
+
+enum OrderStatus {
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  ASSIGNED
+  PICKED_UP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum FeeStatus {
+  PENDING
+  PAID
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum IssuePriority {
+  Low
+  Normal
+  High
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id               String            @id @default(uuid())
+  cognitoSub       String?           @unique
+  email            String            @unique
+  mobile           String?
+  name             String
+  role             Role              @default(CUSTOMER)
+  provider         String            @default("mobile")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  orders           Order[]           @relation("CustomerOrders")
+  issues           SupportIssue[]
+  deliveryProfile  DeliveryPartner?
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+
+  @@map("users")
+}
+
+model Branch {
+  id             Int       @id @default(autoincrement())
+  name           String
+  area           String
+  distance       String    @default("0 km")
+  open           Boolean   @default(true)
+  menuCopiedFrom String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  orders         Order[]
+
+  @@map("branches")
+}
+
+model Category {
+  id           String    @id
+  name         String
+  icon         String    @default("🍲")
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  products     Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id            Int         @id @default(autoincrement())
+  categoryId    String
+  category      Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name          String
+  price         Decimal     @db.Decimal(10, 2)
+  originalPrice Decimal?    @db.Decimal(10, 2)
+  calories      Int         @default(0)
+  portion       String      @default("1 portion")
+  rating        Float       @default(4.5)
+  imageUrl      String
+  description   String
+  ingredients   String[]    @default([])
+  available     Boolean     @default(true)
+  veg           Boolean     @default(true)
+  vegan         Boolean     @default(false)
+  sugarFree     Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  orderItems    OrderItem[]
+
+  @@map("products")
+}
+
+model Order {
+  id            String           @id
+  customerId    String?
+  customerUser  User?            @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: SetNull)
+  branchId      Int?
+  branch        Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  driverId      String?
+  driver        DeliveryPartner? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  customerName  String
+  totalAmount   Decimal          @db.Decimal(10, 2)
+  status        OrderStatus      @default(CONFIRMED)
+  orderType     String           @default("Delivery")
+  etaMinutes    Int              @default(25)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  items         OrderItem[]
+  issues        SupportIssue[]
+  payments      Payment[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity  Int      @default(1)
+  unitPrice Decimal  @db.Decimal(10, 2)
+  subtotal  Decimal  @db.Decimal(10, 2)
+
+  @@map("order_items")
+}
+
+model SupportIssue {
+  id         String        @id
+  orderId    String?
+  order      Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customerId String?
+  customer   User?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName String      @default("Guest Customer")
+  subject    String
+  priority   IssuePriority @default(Normal)
+  status     IssueStatus   @default(OPEN)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@map("support_issues")
+}
+
+model DeliveryPartner {
+  id                 String             @id @default(uuid())
+  userId             String?            @unique
+  user               User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  mobile             String
+  vehicle            String             @default("Bike")
+  verificationStatus VerificationStatus @default(PENDING)
+  documentsVerified  Boolean            @default(false)
+  feeAmount          Decimal            @default(700.00) @db.Decimal(10, 2)
+  feeStatus          FeeStatus          @default(PENDING)
+  trips              Int                @default(0)
+  rating             Float              @default(5.0)
+  earnings           Decimal            @default(0.00) @db.Decimal(10, 2)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  assignedOrders     Order[]
+
+  @@map("delivery_partners")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @default(CUSTOMER)
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  orderId       String
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount        Decimal       @db.Decimal(10, 2)
+  status        PaymentStatus @default(SUCCESSFUL)
+  paymentMethod String        @default("UPI")
+  transactionId String?
+  createdAt     DateTime      @default(now())
+
+  @@map("payments")
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}

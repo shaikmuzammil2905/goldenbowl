@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
+
+:root { font-family: 'DM Sans', system-ui, sans-serif; color: #24221f; background: #f4f1eb; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; min-width: 320px; min-height: 100%; }
+body { margin: 0; padding: 0; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+#root { min-height: 100vh; margin: 0; padding: 0; }
+
+/* Mobile prototype must start at the very top of the viewport. */
+@media (max-width: 700px) {
+  html, body, #root,
+  .mobile-prototype-frame,
+  .mobile-app-shell,
+  .mobile-shell,
+  .route-mobile-body,
+  .route-mobile-header,
+  .mobile-header {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+  }
+
+  .mobile-prototype-frame,
+  .mobile-app-shell,
+  .mobile-shell,
+  .route-mobile-body {
+    position: relative;
+    top: 0 !important;
+  }
+
+  .route-mobile-header,
+  .mobile-header {
+    margin-block-start: 0 !important;
+    inset-block-start: 0 !important;
+  }
+}
