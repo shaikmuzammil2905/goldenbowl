@@ -9,19 +9,14 @@ const LOGO = 'https://res.cloudinary.com/dwmjz9csc/image/upload/v1787120716/imag
 
 export function AdminSignInPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@goldenbowl.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const valid = email.trim() && password.trim();
 
   const handleLogin = (e) => {
     if (e) e.preventDefault();
     if (!valid) return;
     authStorage.setAdminAuth({ email, role: 'admin' });
-    navigate('/admin/dashboard');
-  };
-
-  const quickDemoLogin = () => {
-    authStorage.setAdminAuth({ email: 'admin@goldenbowl.com', role: 'admin' });
     navigate('/admin/dashboard');
   };
 
@@ -43,10 +38,6 @@ export function AdminSignInPage() {
 
             <h1 className="auth-title-clean">Admin Sign In</h1>
             <p className="auth-desc">Sign in with authorized administrator credentials.</p>
-
-            <button type="button" className="demo-login-btn" onClick={quickDemoLogin}>
-              ⚡ 1-Click Demo Admin Login
-            </button>
 
             <form className="clean-form" onSubmit={handleLogin}>
               <label className="clean-field">
@@ -81,7 +72,6 @@ export function AdminSignInPage() {
                 <span>Access Level</span>
                 <b className="auth-badge-ok"><ShieldCheck size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} /> Super Admin</b>
               </div>
-              <div className="auth-summary-row"><span>Demo Credentials</span><b>admin@goldenbowl.com</b></div>
             </div>
 
           </div>

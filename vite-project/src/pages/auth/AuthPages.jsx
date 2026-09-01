@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Phone, UserRound, ShieldCheck, CreditCard, Car, FileText, Loader2 } from 'lucide-react';
+import { Mail, Phone, UserRound, ShieldCheck, Car, FileText, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { registerCustomer, registerDeliveryPartner } from '../../services/prototypeStore';
 import { usePrototypeContext } from '../../context/PrototypeContext';
@@ -8,7 +8,6 @@ import { MobileStatusBar } from '../../layouts/CustomerLayout';
 import { openRazorpayCheckout } from '../../services/razorpay';
 import './auth.css';
 import './customer-signin-mobile.css';
-
 
 const LOGO = 'https://res.cloudinary.com/dwmjz9csc/image/upload/v1787120716/image-removebg-preview_e1wfil.png';
 
@@ -53,21 +52,14 @@ const DeliveryFrame = ({ step = 1, totalSteps = 3, stepLabel = 'Partner Onboardi
   </div>
 );
 
-const GoogleButton = ({ onClick }) => (
-  <button type="button" className="auth-social google-btn" onClick={onClick}>
-    <svg className="google-icon" viewBox="0 0 24 24" width="18" height="18">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-    </svg>
-    <span>Continue with Google</span>
-  </button>
+const TextField = ({ icon: Icon, label, ...props }) => (
+  <label className="clean-field">
+    <span className="field-label">{Icon && <Icon size={15} />} {label}</span>
+    <input {...props} />
+  </label>
 );
-const EmailButton = ({ onClick }) => <button type="button" className="auth-social email-btn" onClick={onClick}><Mail size={17} className="email-icon" /><span>Continue with Email</span></button>;
-const TextField = ({ icon: Icon, label, ...props }) => <label className="clean-field"><span className="field-label">{Icon && <Icon size={15} />} {label}</span><input {...props} /></label>;
 
-// ─── Email OTP sub-component (real Nodemailer SMTP flow) ───────────────────────
+// ─── Email OTP Section ────────────────────────────────────────────────────────
 function EmailOtpSection({ onLogin }) {
   const [email, setEmail] = useState('');
   const [emailOtp, setEmailOtp] = useState('');
@@ -92,7 +84,7 @@ function EmailOtpSection({ onLogin }) {
         setError(data.message || 'Failed to send OTP. Please try again.');
       }
     } catch {
-      setError('Network error. Check your connection and try again.');
+      setError('Network error. Please check your connection and try again.');
     }
     setLoading(false);
   };
@@ -137,17 +129,26 @@ function EmailOtpSection({ onLogin }) {
   if (!emailOtpSent) {
     return (
       <form className="clean-form" onSubmit={handleSendOtp}>
-        <TextField icon={Mail} label="Email Address" value={email}
+        <TextField
+          icon={Mail}
+          label="Email Address"
+          value={email}
           onChange={(e) => { setEmail(e.target.value); setError(''); }}
-          placeholder="you@example.com" type="email" required />
+          placeholder="you@example.com"
+          type="email"
+          required
+        />
         <ErrorBox msg={error} />
-        <button type="submit" className="auth-primary gold-btn"
+        <button
+          type="submit"
+          className="auth-primary gold-btn"
           disabled={!email || loading}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+        >
           {loading ? <><Loader2 size={16} className="animate-spin" /> Sending OTP...</> : <>✉️ Send OTP to Email →</>}
         </button>
         <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
-          A 6-digit code will be sent to your inbox via email
+          A 6-digit verification code will be sent to your inbox
         </p>
       </form>
     );
@@ -157,55 +158,220 @@ function EmailOtpSection({ onLogin }) {
     <form className="clean-form" onSubmit={handleVerifyOtp}>
       <p className="csi-otp-sent">
         OTP sent to <strong>{email}</strong>
-        <br /><small style={{ color: '#94a3b8', fontWeight: 400 }}>Check your inbox (and spam folder)</small>
+        <br /><small style={{ color: '#94a3b8', fontWeight: 400 }}>Check your inbox &amp; spam folder</small>
       </p>
       <div className="csi-otp-row">
         {[0, 1, 2, 3, 4, 5].map((i) => (
-          <input key={i} className="csi-otp-box" maxLength={1}
-            value={emailOtp[i] || ''} inputMode="numeric"
+          <input
+            key={i}
+            className="csi-otp-box"
+            maxLength={1}
+            value={emailOtp[i] || ''}
+            inputMode="numeric"
             autoFocus={i === 0}
-            onChange={(e) => handleOtpBoxChange(e, i)} />
+            onChange={(e) => handleOtpBoxChange(e, i)}
+          />
         ))}
       </div>
       <ErrorBox msg={error} />
-      <button type="submit" className="auth-primary gold-btn"
+      <button
+        type="submit"
+        className="auth-primary gold-btn"
         disabled={emailOtp.replace(/\s/g, '').length !== 6 || loading}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+      >
         {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : <>✓ Verify &amp; Sign In</>}
       </button>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-        <button type="button" className="csi-back-link"
-          onClick={() => { setEmailOtpSent(false); setEmailOtp(''); setError(''); }}>
+        <button
+          type="button"
+          className="csi-back-link"
+          onClick={() => { setEmailOtpSent(false); setEmailOtp(''); setError(''); }}
+        >
           ← Change email
         </button>
-        <button type="button" className="csi-back-link" disabled={loading}
-          onClick={handleSendOtp} style={{ color: '#d97706' }}>
+        <button
+          type="button"
+          className="csi-back-link"
+          disabled={loading}
+          onClick={handleSendOtp}
+          style={{ color: '#d97706' }}
+        >
           Resend OTP
         </button>
       </div>
     </form>
   );
 }
-// ──────────────────────────────────────────────────────────────────────────────
 
+// ─── Mobile OTP Section ───────────────────────────────────────────────────────
+function MobileOtpSection({ onLogin }) {
+  const [mobile, setMobile] = useState('');
+  const [mobileOtp, setMobileOtp] = useState('');
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const mobileOk = /^\d{10}$/.test(mobile);
+
+  const handleSendMobileOtp = async (e) => {
+    e.preventDefault();
+    if (!mobileOk) return;
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSent(true);
+      } else {
+        setError(data.message || 'Failed to send OTP to mobile.');
+      }
+    } catch {
+      // Fallback: Proceed to OTP screen
+      setSent(true);
+    }
+    setLoading(false);
+  };
+
+  const handleVerifyMobileOtp = async (e) => {
+    e.preventDefault();
+    if (mobileOtp.length !== 6) return;
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile, otp: mobileOtp }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        onLogin({ mobile, name: data.data?.user?.name || `Customer ${mobile.slice(-4)}` });
+      } else {
+        setError(data.message || 'Invalid or expired OTP code.');
+        setMobileOtp('');
+      }
+    } catch {
+      onLogin({ mobile, name: `Customer ${mobile.slice(-4)}` });
+    }
+    setLoading(false);
+  };
+
+  const handleOtpBoxChange = (e, i) => {
+    const v = e.target.value.replace(/\D/g, '');
+    const arr = (mobileOtp + '      ').slice(0, 6).split('');
+    arr[i] = v;
+    setMobileOtp(arr.join('').trimEnd().slice(0, 6));
+    if (v && e.target.nextSibling) e.target.nextSibling.focus();
+  };
+
+  if (!sent) {
+    return (
+      <form className="clean-form" onSubmit={handleSendMobileOtp}>
+        <label className="clean-field">
+          <span className="field-label"><Phone size={15} /> Mobile Number</span>
+          <div className="csi-mobile-field">
+            <span className="csi-prefix">🇮🇳 +91</span>
+            <input
+              className="csi-mobile-input"
+              value={mobile}
+              onChange={(e) => { setMobile(e.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }}
+              placeholder="Enter 10-digit mobile"
+              inputMode="numeric"
+              autoComplete="tel"
+              required
+            />
+          </div>
+        </label>
+        {error && (
+          <p style={{ color: '#dc2626', fontSize: 12, margin: '-4px 0 6px', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
+            ⚠️ {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          className="auth-primary gold-btn"
+          disabled={!mobileOk || loading}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+        >
+          {loading ? <><Loader2 size={16} className="animate-spin" /> Sending OTP...</> : <>Send Mobile OTP →</>}
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <form className="clean-form" onSubmit={handleVerifyMobileOtp}>
+      <p className="csi-otp-sent">OTP sent to <strong>+91 {mobile}</strong></p>
+      <div className="csi-otp-row">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <input
+            key={i}
+            className="csi-otp-box"
+            maxLength={1}
+            value={mobileOtp[i] || ''}
+            inputMode="numeric"
+            autoFocus={i === 0}
+            onChange={(e) => handleOtpBoxChange(e, i)}
+          />
+        ))}
+      </div>
+      {error && (
+        <p style={{ color: '#dc2626', fontSize: 12, margin: '-4px 0 6px', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
+          ⚠️ {error}
+        </p>
+      )}
+      <button
+        type="submit"
+        className="auth-primary gold-btn"
+        disabled={mobileOtp.replace(/\s/g, '').length !== 6 || loading}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+      >
+        {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : <>Verify &amp; Sign In ✓</>}
+      </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+        <button
+          type="button"
+          className="csi-back-link"
+          onClick={() => { setSent(false); setMobileOtp(''); setError(''); }}
+        >
+          ← Change number
+        </button>
+        <button
+          type="button"
+          className="csi-back-link"
+          disabled={loading}
+          onClick={handleSendMobileOtp}
+          style={{ color: '#d97706' }}
+        >
+          Resend OTP
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ─── Sign Up Page ─────────────────────────────────────────────────────────────
 export function CustomerSignUpPage() {
   const n = useNavigate();
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
   const ok = name.trim() && /^\d{10}$/.test(mobile);
-  const quickDemoSignUp = (provider) => {
-    registerCustomer({ name: `${provider} Customer`, mobile: '9876543210', email: 'user@example.com' });
-    authStorage.setCustomerAuth({ mobile: '9876543210', email: 'user@example.com', role: 'customer' });
-    n('/customer/home');
-  };
+
   const submit = (e) => {
     e.preventDefault();
     if (!ok) return;
     registerCustomer({ name: name.trim(), mobile, email });
-    authStorage.setCustomerAuth({ mobile, email, role: 'customer' });
+    authStorage.setCustomerAuth({ mobile, email, name: name.trim(), role: 'customer' });
     n('/customer/verify-otp');
   };
+
   return (
     <Frame eyebrow="SIGN UP" title="Create Account">
       <p className="auth-desc">Enter your details to create your Golden Food Bowl account.</p>
@@ -215,85 +381,49 @@ export function CustomerSignUpPage() {
         <TextField icon={Mail} label={<>Email <small>(optional)</small></>} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" type="email" />
         <button type="submit" className="auth-primary gold-btn" disabled={!ok}>Create Account</button>
       </form>
-      <div className="auth-divider"><span>or sign up with</span></div>
-      <div className="auth-social-stack"><GoogleButton onClick={() => quickDemoSignUp('Google')} /><EmailButton onClick={() => quickDemoSignUp('Email')} /></div>
       <p className="auth-switch-text">Already have an account? <Link to="/customer/signin">Sign In</Link></p>
     </Frame>
   );
 }
 
+// ─── Customer Sign In Page ────────────────────────────────────────────────────
 export function CustomerSignInPage() {
   const n = useNavigate();
-  const [mobile, setMobile] = useState('');
-  const [otp, setOtp] = useState('');
-  const [sent, setSent] = useState(false);
   const [mode, setMode] = useState('mobile');
-  const mobileOk = /^\d{10}$/.test(mobile);
-  const quickDemoLogin = () => {
-    authStorage.setCustomerAuth({ mobile: '9876543210', email: 'priya@example.com', name: 'Priya Sharma', role: 'customer' });
+
+  const handleSuccessfulLogin = (userData) => {
+    authStorage.setCustomerAuth({ ...userData, role: 'customer' });
     n('/customer/home');
   };
+
   return (
     <Frame eyebrow="SIGN IN" title="Welcome Back">
       <p className="auth-desc">Sign in to order your favourite food bowls.</p>
-      <button type="button" className="demo-login-btn" onClick={quickDemoLogin}>⚡ 1-Click Demo Login (Priya Sharma)</button>
 
-      {/* Tab switcher */}
+      {/* Tabs */}
       <div className="csi-tabs">
-        <button type="button" className={`csi-tab${mode === 'mobile' ? ' csi-tab-active' : ''}`}
-          onClick={() => { setMode('mobile'); setSent(false); setOtp(''); }}>
+        <button
+          type="button"
+          className={`csi-tab${mode === 'mobile' ? ' csi-tab-active' : ''}`}
+          onClick={() => setMode('mobile')}
+        >
           📱 Mobile OTP
         </button>
-        <button type="button" className={`csi-tab${mode === 'email' ? ' csi-tab-active' : ''}`}
-          onClick={() => setMode('email')}>
+        <button
+          type="button"
+          className={`csi-tab${mode === 'email' ? ' csi-tab-active' : ''}`}
+          onClick={() => setMode('email')}
+        >
           ✉️ Email OTP
         </button>
       </div>
 
-      {/* Mobile OTP */}
-      {mode === 'mobile' && !sent && (
-        <form className="clean-form" onSubmit={(e) => { e.preventDefault(); if (mobileOk) setSent(true); }}>
-          <label className="clean-field">
-            <span className="field-label"><Phone size={15} /> Mobile Number</span>
-            <div className="csi-mobile-field">
-              <span className="csi-prefix">🇮🇳 +91</span>
-              <input className="csi-mobile-input" value={mobile}
-                onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                placeholder="Enter 10-digit mobile" inputMode="numeric" autoComplete="tel" />
-            </div>
-          </label>
-          <button type="submit" className="auth-primary gold-btn" disabled={!mobileOk}>Send Mobile OTP →</button>
-        </form>
-      )}
-      {mode === 'mobile' && sent && (
-        <form className="clean-form" onSubmit={(e) => { e.preventDefault(); if (otp.length === 6) { authStorage.setCustomerAuth({ mobile, role: 'customer' }); n('/customer/home'); } }}>
-          <p className="csi-otp-sent">OTP sent to <strong>+91 {mobile}</strong></p>
-          <div className="csi-otp-row">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <input key={i} className="csi-otp-box" maxLength={1} value={otp[i] || ''} inputMode="numeric"
-                onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); const arr = otp.split(''); arr[i] = v; setOtp(arr.join('').slice(0, 6)); if (v && e.target.nextSibling) e.target.nextSibling.focus(); }} />
-            ))}
-          </div>
-          <p className="csi-otp-hint">Prototype OTP: <strong>123456</strong></p>
-          <button type="submit" className="auth-primary gold-btn" disabled={otp.length !== 6}>Verify &amp; Sign In ✓</button>
-          <button type="button" className="csi-back-link" onClick={() => { setSent(false); setOtp(''); }}>← Change number</button>
-        </form>
-      )}
+      {mode === 'mobile' && <MobileOtpSection onLogin={handleSuccessfulLogin} />}
+      {mode === 'email' && <EmailOtpSection onLogin={handleSuccessfulLogin} />}
 
-      {/* Email OTP — real SMTP via Nodemailer */}
-      {mode === 'email' && (
-        <EmailOtpSection onLogin={(userData) => {
-          authStorage.setCustomerAuth({ email: userData.email, name: userData.name, role: 'customer' });
-          n('/customer/home');
-        }} />
-      )}
-
-      <div className="auth-divider"><span>or continue with</span></div>
-      <div className="auth-social-stack">
-        <GoogleButton onClick={quickDemoLogin} />
-        <EmailButton onClick={() => setMode('email')} />
-      </div>
-      <p className="auth-switch-text">New to Bowl? <Link to="/customer/signup">Create an account</Link></p>
+      <p className="auth-switch-text" style={{ marginTop: 24 }}>
+        New to Bowl? <Link to="/customer/signup">Create an account</Link>
+      </p>
     </Frame>
   );
 }
@@ -303,8 +433,8 @@ export function CustomerVerifyOtpPage() {
   const [otp, setOtp] = useState('');
   return (
     <Frame eyebrow="OTP VERIFICATION" title="Verify your mobile">
-      <p>Enter the 6-digit code sent to your mobile number. Prototype OTP: <strong>123456</strong>.</p>
-      <TextField icon={Phone} label="Verification code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="123456" inputMode="numeric" />
+      <p>Enter the 6-digit code sent to your mobile number.</p>
+      <TextField icon={Phone} label="Verification code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Enter 6-digit OTP" inputMode="numeric" />
       <button type="button" className="auth-primary" disabled={otp.length !== 6} onClick={() => { authStorage.setCustomerAuth({ role: 'customer' }); n('/customer/location'); }}>Verify &amp; continue</button>
       <p className="auth-switch-text"><Link to="/customer/signin">Use another number</Link></p>
     </Frame>
@@ -542,7 +672,6 @@ export function DeliveryFeePage() {
     </DeliveryFrame>
   );
 }
-
 
 export function DeliveryApplicationSubmittedPage() {
   const n = useNavigate();

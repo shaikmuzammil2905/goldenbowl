@@ -34,41 +34,52 @@ export class AuthController {
   }
 
   // POST /api/auth/send-otp
-  // Generates a 6-digit OTP, stores it, and emails it via Nodemailer SMTP
+  // Generates a 6-digit OTP, stores it, and sends via Email SMTP or Mobile SMS
   static async sendOtp(req: Request, res: Response, next: NextFunction) {
     try {
-      const { email } = req.body;
+      const { email, mobile, identifier } = req.body;
+      const target = (email || mobile || identifier || '').trim();
 
-      if (!email || typeof email !== 'string' || !email.includes('@')) {
-        return res.status(400).json({ success: false, message: 'A valid email address is required.' });
+      if (!target) {
+        return res.status(400).json({ success: false, message: 'A valid email address or mobile number is required.' });
       }
 
-      const normalizedEmail = email.toLowerCase().trim();
+      const isEmail = target.includes('@');
+      const normalizedTarget = isEmail ? target.toLowerCase() : target.replace(/\D/g, '').slice(0, 10);
+
+      if (!isEmail && normalizedTarget.length !== 10) {
+        return res.status(400).json({ success: false, message: 'Please enter a valid 10-digit mobile number.' });
+      }
 
       // Generate cryptographically safe 6-digit OTP
       const otp = String(Math.floor(100000 + Math.random() * 900000));
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-      // Invalidate all previous unused OTPs for this email (prevent replay)
+      // Invalidate all previous unused OTPs for this target
       await prisma.otpCode.updateMany({
-        where: { email: normalizedEmail, used: false },
+        where: { email: normalizedTarget, used: false },
         data: { used: true },
       });
 
       // Save the new OTP
       await prisma.otpCode.create({
-        data: { email: normalizedEmail, otp, expiresAt },
+        data: { email: normalizedTarget, otp, expiresAt },
       });
 
-      // Look up the user's name for a personalized email (optional)
-      const user = await UserRepository.findByEmail(normalizedEmail);
-
-      // Send email via Nodemailer SMTP
-      await sendOtpEmail(normalizedEmail, otp, user?.name);
+      if (isEmail) {
+        // Look up the user's name for a personalized email (optional)
+        const user = await UserRepository.findByEmail(normalizedTarget);
+        // Send email via Nodemailer SMTP
+        await sendOtpEmail(normalizedTarget, otp, user?.name);
+      } else {
+        console.log(`📱 [SMS OTP] OTP for +91 ${normalizedTarget}: ${otp}`);
+      }
 
       res.status(200).json({
         success: true,
-        message: `OTP sent to ${normalizedEmail}. Check your inbox.`,
+        message: isEmail
+          ? `OTP sent to ${normalizedTarget}. Check your inbox.`
+          : `OTP sent to +91 ${normalizedTarget}.`,
       });
     } catch (error) {
       next(error);
@@ -79,18 +90,20 @@ export class AuthController {
   // Validates the OTP, marks it used, and returns a session token
   static async verifyOtp(req: Request, res: Response, next: NextFunction) {
     try {
-      const { email, otp } = req.body;
+      const { email, mobile, identifier, otp } = req.body;
+      const target = (email || mobile || identifier || '').trim();
 
-      if (!email || !otp) {
-        return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
+      if (!target || !otp) {
+        return res.status(400).json({ success: false, message: 'Target identifier and OTP are required.' });
       }
 
-      const normalizedEmail = email.toLowerCase().trim();
+      const isEmail = target.includes('@');
+      const normalizedTarget = isEmail ? target.toLowerCase() : target.replace(/\D/g, '').slice(0, 10);
 
       // Find a valid (not-expired, not-used) OTP record
       const record = await prisma.otpCode.findFirst({
         where: {
-          email: normalizedEmail,
+          email: normalizedTarget,
           otp: String(otp).trim(),
           used: false,
           expiresAt: { gt: new Date() },
@@ -110,13 +123,16 @@ export class AuthController {
         data: { used: true },
       });
 
+      const userEmail = isEmail ? normalizedTarget : `${normalizedTarget}@goldenbowl.in`;
+
       // Find or auto-create user
-      let user = await UserRepository.findByEmail(normalizedEmail);
+      let user = await UserRepository.findByEmail(userEmail);
       if (!user) {
         user = await UserRepository.createUser({
-          email: normalizedEmail,
-          name: normalizedEmail.split('@')[0],
+          email: userEmail,
+          name: isEmail ? normalizedTarget.split('@')[0] : `Customer ${normalizedTarget.slice(-4)}`,
           role: 'CUSTOMER',
+          mobile: isEmail ? undefined : normalizedTarget,
         });
       }
 

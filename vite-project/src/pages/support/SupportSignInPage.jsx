@@ -23,11 +23,6 @@ export function SupportSignInPage() {
     }
   };
 
-  const handleDemoLogin = () => {
-    authStorage.setSupportAuth({ email: 'support@goldenbowl.com', role: 'support' });
-    navigate('/support/dashboard', { replace: true });
-  };
-
   return (
     <div className="mobile-prototype-frame">
       <div className="mobile-app-shell">
@@ -48,20 +43,6 @@ export function SupportSignInPage() {
             <p className="auth-desc" style={{ color: '#64748b' }}>
               Enter your Golden Food Bowl support team credentials to access the live ticket desk.
             </p>
-
-            <button
-              type="button"
-              className="demo-login-btn"
-              onClick={handleDemoLogin}
-              style={{
-                background: '#f0f9ff',
-                borderColor: '#38bdf8',
-                color: '#0369a1',
-                marginBottom: 16,
-              }}
-            >
-              🎧 1-Click Demo Support Login (Agent Ananya)
-            </button>
 
             {error && (
               <div
