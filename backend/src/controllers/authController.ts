@@ -1,9 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { AuthenticatedRequest } from '../types/index.js';
 import { UserRepository } from '../repositories/userRepository.js';
 import { sendOtpEmail } from '../services/emailService.js';
-import { sendMobileOtpSms } from '../services/smsService.js';
+import { sendMobileOtpSms, normalizeIndianMobile } from '../services/smsService.js';
 import { prisma } from '../config/prisma.js';
+
+// Cryptographic HMAC-SHA256 hash helper for OTP storage
+function hashOtp(identifier: string, rawOtp: string): string {
+  const secret = process.env.OTP_SECRET || 'goldenbowl_prod_otp_secret_key_2026';
+  return crypto.createHmac('sha256', secret).update(`${identifier}:${rawOtp}`).digest('hex');
+}
 
 export class AuthController {
   static async login(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -35,61 +42,134 @@ export class AuthController {
   }
 
   // POST /api/auth/send-otp
-  // Generates a 6-digit OTP, stores it, and sends via Email SMTP or Mobile SMS Gateway
+  // Generates secure 6-digit OTP, stores cryptographic hash in DB, dispatches via SMS Gateway or Email SMTP
   static async sendOtp(req: Request, res: Response, next: NextFunction) {
     try {
       const { email, mobile, identifier } = req.body;
-      const target = (email || mobile || identifier || '').trim();
+      const rawTarget = (email || mobile || identifier || '').toString().trim();
 
-      if (!target) {
-        return res.status(400).json({ success: false, message: 'A valid email address or mobile number is required.' });
+      if (!rawTarget) {
+        return res.status(400).json({
+          success: false,
+          message: 'A valid mobile number or email address is required.',
+        });
       }
 
-      const isEmail = target.includes('@');
-      const normalizedTarget = isEmail ? target.toLowerCase() : target.replace(/\D/g, '').slice(-10);
+      const isEmail = rawTarget.includes('@');
+      let normalizedIdentifier: string;
 
-      if (!isEmail && normalizedTarget.length !== 10) {
-        return res.status(400).json({ success: false, message: 'Please enter a valid 10-digit mobile number.' });
+      if (isEmail) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(rawTarget)) {
+          return res.status(400).json({ success: false, message: 'Please enter a valid email address.' });
+        }
+        normalizedIdentifier = rawTarget.toLowerCase();
+      } else {
+        const cleanPhone = normalizeIndianMobile(rawTarget);
+        if (!cleanPhone) {
+          return res.status(400).json({
+            success: false,
+            message: 'Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).',
+          });
+        }
+        normalizedIdentifier = cleanPhone;
       }
 
-      // Generate cryptographically safe 6-digit OTP
-      const otp = String(Math.floor(100000 + Math.random() * 900000));
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      // ── RATE LIMITING ────────────────────────────────────────────────────────
+      const now = Date.now();
 
-      // Invalidate all previous unused OTPs for this target
+      // 1. Resend cooldown: Must wait 60 seconds between OTP requests
+      const recentOtp = await prisma.otpCode.findFirst({
+        where: {
+          email: normalizedIdentifier,
+          createdAt: { gt: new Date(now - 60 * 1000) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (recentOtp) {
+        return res.status(429).json({
+          success: false,
+          message: 'Please wait 60 seconds before requesting another verification code.',
+        });
+      }
+
+      // 2. Frequency limit: Maximum 5 OTP requests per identifier per 15 minutes
+      const count15m = await prisma.otpCode.count({
+        where: {
+          email: normalizedIdentifier,
+          createdAt: { gt: new Date(now - 15 * 60 * 1000) },
+        },
+      });
+
+      if (count15m >= 5) {
+        return res.status(429).json({
+          success: false,
+          message: 'Too many OTP requests. Please try again in 15 minutes.',
+        });
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
+      // Cryptographically secure 6-digit random OTP (100000 - 999999)
+      const rawOtp = String(crypto.randomInt(100000, 1000000));
+      const hashedOtp = hashOtp(normalizedIdentifier, rawOtp);
+      const expiresAt = new Date(now + 10 * 60 * 1000); // 10 minutes expiry
+
+      // Invalidate any existing unused OTPs for this identifier
       await prisma.otpCode.updateMany({
-        where: { email: normalizedTarget, used: false },
+        where: { email: normalizedIdentifier, used: false },
         data: { used: true },
       });
 
-      // Save the new OTP in database
+      // Save securely hashed OTP into database
       await prisma.otpCode.create({
-        data: { email: normalizedTarget, otp, expiresAt },
+        data: {
+          email: normalizedIdentifier,
+          otp: hashedOtp,
+          expiresAt,
+        },
       });
 
-      let smsResult = null;
-
+      // ── DISPATCH ─────────────────────────────────────────────────────────────
       if (isEmail) {
-        // Look up the user's name for a personalized email (optional)
-        const user = await UserRepository.findByEmail(normalizedTarget);
-        // Send email via Nodemailer SMTP
-        await sendOtpEmail(normalizedTarget, otp, user?.name);
+        const user = await UserRepository.findByEmail(normalizedIdentifier);
+        try {
+          await sendOtpEmail(normalizedIdentifier, rawOtp, user?.name);
+        } catch (emailErr: any) {
+          // If sending email fails, invalidate the OTP record and fail securely
+          await prisma.otpCode.updateMany({
+            where: { email: normalizedIdentifier, used: false },
+            data: { used: true },
+          });
+          return res.status(503).json({
+            success: false,
+            message: 'Unable to send email OTP. Please check your email address or try again later.',
+          });
+        }
       } else {
-        // Send SMS to physical phone number via Fast2SMS / Twilio
-        smsResult = await sendMobileOtpSms(normalizedTarget, otp);
+        const smsResult = await sendMobileOtpSms(normalizedIdentifier, rawOtp);
+
+        // FAIL SECURELY: If SMS gateway failed, invalidate OTP and fail
+        if (!smsResult.sent) {
+          await prisma.otpCode.updateMany({
+            where: { email: normalizedIdentifier, used: false },
+            data: { used: true },
+          });
+          return res.status(503).json({
+            success: false,
+            message: smsResult.error?.includes('FAST2SMS_API_KEY')
+              ? 'SMS Service is currently being configured. Please use Email OTP or contact support.'
+              : 'Unable to send SMS verification code. Please check your mobile number or try again later.',
+          });
+        }
       }
 
-      const isRealSmsSent = smsResult?.sent === true;
-
+      // Safe production response — NEVER return OTP or otpHint
       res.status(200).json({
         success: true,
         message: isEmail
-          ? `OTP sent to ${normalizedTarget}. Check your inbox.`
-          : (isRealSmsSent
-              ? `Verification code sent via SMS to +91 ${normalizedTarget}.`
-              : `OTP code generated for +91 ${normalizedTarget}.`),
-        // Provide the generated OTP for instant verification if SMS gateway is not yet active
-        otpHint: !isEmail && !isRealSmsSent ? otp : undefined,
+          ? `Verification code sent to ${normalizedIdentifier}. Please check your inbox.`
+          : `Verification code sent via SMS to +91 ${normalizedIdentifier}.`,
       });
     } catch (error) {
       next(error);
@@ -97,52 +177,88 @@ export class AuthController {
   }
 
   // POST /api/auth/verify-otp
-  // Validates the OTP, marks it used, and returns a session token
+  // Validates user-submitted OTP against secure hash in database
   static async verifyOtp(req: Request, res: Response, next: NextFunction) {
     try {
       const { email, mobile, identifier, otp } = req.body;
-      const target = (email || mobile || identifier || '').trim();
+      const rawTarget = (email || mobile || identifier || '').toString().trim();
+      const rawOtp = (otp || '').toString().trim();
 
-      if (!target || !otp) {
-        return res.status(400).json({ success: false, message: 'Target identifier and OTP are required.' });
+      if (!rawTarget || !rawOtp) {
+        return res.status(400).json({
+          success: false,
+          message: 'Both destination identifier and 6-digit OTP code are required.',
+        });
       }
 
-      const isEmail = target.includes('@');
-      const normalizedTarget = isEmail ? target.toLowerCase() : target.replace(/\D/g, '').slice(-10);
+      // Validate 6-digit numeric OTP
+      if (!/^\d{6}$/.test(rawOtp)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enter a valid 6-digit numerical verification code.',
+        });
+      }
 
-      // Find a valid (not-expired, not-used) OTP record
+      const isEmail = rawTarget.includes('@');
+      let normalizedIdentifier: string;
+
+      if (isEmail) {
+        normalizedIdentifier = rawTarget.toLowerCase();
+      } else {
+        const cleanPhone = normalizeIndianMobile(rawTarget);
+        if (!cleanPhone) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid mobile number format.',
+          });
+        }
+        normalizedIdentifier = cleanPhone;
+      }
+
+      // Find active, unexpired, unused OTP record
       const record = await prisma.otpCode.findFirst({
         where: {
-          email: normalizedTarget,
-          otp: String(otp).trim(),
+          email: normalizedIdentifier,
           used: false,
           expiresAt: { gt: new Date() },
         },
+        orderBy: { createdAt: 'desc' },
       });
 
       if (!record) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid or expired verification code. Please request a new one.',
+          message: 'Invalid or expired verification code. Please request a new code.',
         });
       }
 
-      // Mark OTP as used so it cannot be reused
+      // Validate secure hash comparison
+      const computedHash = hashOtp(normalizedIdentifier, rawOtp);
+      const isMatch = record.otp === computedHash || record.otp === rawOtp;
+
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: 'Incorrect verification code. Please check and try again.',
+        });
+      }
+
+      // One-time consumption: Mark OTP as used immediately so it can never be reused
       await prisma.otpCode.update({
         where: { id: record.id },
         data: { used: true },
       });
 
-      const userEmail = isEmail ? normalizedTarget : `${normalizedTarget}@goldenbowl.in`;
+      const userEmail = isEmail ? normalizedIdentifier : `${normalizedIdentifier}@goldenbowl.in`;
 
-      // Find or auto-create user
+      // Find or register new user
       let user = await UserRepository.findByEmail(userEmail);
       if (!user) {
         user = await UserRepository.createUser({
           email: userEmail,
-          name: isEmail ? normalizedTarget.split('@')[0] : `Customer ${normalizedTarget.slice(-4)}`,
+          name: isEmail ? normalizedIdentifier.split('@')[0] : `Customer ${normalizedIdentifier.slice(-4)}`,
           role: 'CUSTOMER',
-          mobile: isEmail ? undefined : normalizedTarget,
+          mobile: isEmail ? undefined : normalizedIdentifier,
         });
       }
 

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Phone, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MobileStatusBar } from '../../layouts/CustomerLayout';
 import { authStorage } from '../../services/storage/authStorage';
 import './auth.css';
@@ -14,11 +14,19 @@ export function DeliveryPartnerSignInPage() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cooldown, setCooldown] = useState(0);
+
   const valid = /^\d{10}$/.test(mobile);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((c) => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const handleSendOtp = async (e) => {
     if (e) e.preventDefault();
-    if (!valid) return;
+    if (!valid || cooldown > 0) return;
     setError('');
     setLoading(true);
     try {
@@ -30,38 +38,37 @@ export function DeliveryPartnerSignInPage() {
       const data = await res.json();
       if (data.success) {
         setSent(true);
-        if (data.otpHint) setOtp(data.otpHint);
+        setCooldown(60);
       } else {
-        setError(data.message || 'Failed to send OTP.');
+        setError(data.message || 'Unable to send SMS verification code. Please try again.');
       }
     } catch {
-      setSent(true);
+      setError('Network connection error. Please check your internet connection.');
     }
     setLoading(false);
   };
 
   const handleVerifyOtp = async (e) => {
     if (e) e.preventDefault();
-    if (otp.length !== 6) return;
+    if (otp.replace(/\D/g, '').length !== 6) return;
     setError('');
     setLoading(true);
     try {
       const res = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile, otp }),
+        body: JSON.stringify({ mobile, otp: otp.trim() }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.data?.user) {
         authStorage.setDeliveryAuth({ mobile, role: 'delivery' });
         navigate('/delivery/dashboard');
       } else {
-        setError(data.message || 'Invalid or expired OTP code.');
+        setError(data.message || 'Invalid verification code. Please try again.');
         setOtp('');
       }
     } catch {
-      authStorage.setDeliveryAuth({ mobile, role: 'delivery' });
-      navigate('/delivery/dashboard');
+      setError('Verification request failed. Please check your connection.');
     }
     setLoading(false);
   };
@@ -118,12 +125,12 @@ export function DeliveryPartnerSignInPage() {
                   disabled={!valid || loading}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                 >
-                  {loading ? <><Loader2 size={16} className="animate-spin" /> Sending OTP...</> : <>Send Mobile OTP →</>}
+                  {loading ? <><Loader2 size={16} className="animate-spin" /> Sending SMS Code...</> : <>Send SMS Code →</>}
                 </button>
               </form>
             ) : (
               <form className="clean-form" onSubmit={handleVerifyOtp}>
-                <p className="csi-otp-sent">OTP sent to <strong>+91 {mobile}</strong></p>
+                <p className="csi-otp-sent">Verification code sent to <strong>+91 {mobile}</strong></p>
                 <div className="csi-otp-row">
                   {[0, 1, 2, 3, 4, 5].map((i) => (
                     <input
@@ -135,10 +142,9 @@ export function DeliveryPartnerSignInPage() {
                       autoFocus={i === 0}
                       onChange={(e) => {
                         const v = e.target.value.replace(/\D/g, '');
-                        const arr = otp.split('');
+                        const arr = (otp + '      ').slice(0, 6).split('');
                         arr[i] = v;
-                        const next = arr.join('').slice(0, 6);
-                        setOtp(next);
+                        setOtp(arr.join('').trimEnd().slice(0, 6));
                         if (v && e.target.nextSibling) e.target.nextSibling.focus();
                       }}
                     />
@@ -154,7 +160,7 @@ export function DeliveryPartnerSignInPage() {
                 <button
                   type="submit"
                   className="auth-primary gold-btn"
-                  disabled={otp.length !== 6 || loading}
+                  disabled={otp.replace(/\s/g, '').length !== 6 || loading}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                 >
                   {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : <>Verify &amp; Continue ✓</>}
@@ -163,8 +169,14 @@ export function DeliveryPartnerSignInPage() {
                   <button type="button" className="csi-back-link" onClick={() => { setSent(false); setOtp(''); setError(''); }}>
                     ← Change number
                   </button>
-                  <button type="button" className="csi-back-link" disabled={loading} onClick={handleSendOtp} style={{ color: '#d97706' }}>
-                    Resend OTP
+                  <button
+                    type="button"
+                    className="csi-back-link"
+                    disabled={loading || cooldown > 0}
+                    onClick={handleSendOtp}
+                    style={{ color: cooldown > 0 ? '#94a3b8' : '#d97706' }}
+                  >
+                    {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Code'}
                   </button>
                 </div>
               </form>

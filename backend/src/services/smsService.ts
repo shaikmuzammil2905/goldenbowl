@@ -7,20 +7,46 @@ export interface SmsSendResult {
 }
 
 /**
- * Sends a real 6-digit SMS OTP to an Indian (+91) mobile number.
- * Supports Fast2SMS (instant Indian OTP gateway) and Twilio.
+ * Normalizes and validates Indian (+91) mobile numbers.
+ * Returns clean 10-digit number (e.g., '9876543210') or null if invalid.
  */
-export async function sendMobileOtpSms(mobileNumber: string, otp: string): Promise<SmsSendResult> {
-  const cleanNumber = mobileNumber.replace(/\D/g, '').slice(-10);
+export function normalizeIndianMobile(rawMobile: string): string | null {
+  if (!rawMobile || typeof rawMobile !== 'string') return null;
 
-  // 1. If Fast2SMS API Key is provided in environment variables (Recommended for India)
+  // Remove all non-digits
+  let digits = rawMobile.replace(/\D/g, '');
+
+  // Handle +91 or 91 prefix (12 digits)
+  if (digits.length === 12 && digits.startsWith('91')) {
+    digits = digits.slice(2);
+  }
+  // Handle leading 0 prefix (11 digits)
+  else if (digits.length === 11 && digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+
+  // Valid Indian mobile numbers are 10 digits starting with 6, 7, 8, or 9
+  if (/^[6-9]\d{9}$/.test(digits)) {
+    return digits;
+  }
+
+  return null;
+}
+
+/**
+ * Sends a real 6-digit SMS OTP to a verified Indian mobile number.
+ * Supports Fast2SMS (primary for India) and Twilio (fallback).
+ * Strictly requires active API key from environment variables.
+ */
+export async function sendMobileOtpSms(cleanNumber: string, otp: string): Promise<SmsSendResult> {
+  // 1. Fast2SMS API Gateway (Recommended for Indian numbers)
   const fast2SmsKey = process.env.FAST2SMS_API_KEY;
-  if (fast2SmsKey) {
+  if (fast2SmsKey && fast2SmsKey.trim().length > 0) {
     try {
       const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
         method: 'POST',
         headers: {
-          authorization: fast2SmsKey,
+          authorization: fast2SmsKey.trim(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -32,19 +58,17 @@ export async function sendMobileOtpSms(mobileNumber: string, otp: string): Promi
 
       const data = (await response.json()) as any;
       if (data && (data.return === true || data.status_code === 200)) {
-        console.log(`✅ [SMS Gateway - Fast2SMS] OTP ${otp} delivered to +91 ${cleanNumber}`);
         return { sent: true, provider: 'Fast2SMS' };
       } else {
-        console.error('❌ [Fast2SMS Error]:', data?.message || data);
-        return { sent: false, provider: 'Fast2SMS', error: data?.message };
+        const errMsg = Array.isArray(data?.message) ? data.message.join(', ') : (data?.message || 'Fast2SMS dispatch rejected');
+        return { sent: false, provider: 'Fast2SMS', error: errMsg };
       }
     } catch (err: any) {
-      console.error('❌ [Fast2SMS Request Failed]:', err.message);
       return { sent: false, provider: 'Fast2SMS', error: err.message };
     }
   }
 
-  // 2. If Twilio credentials are provided
+  // 2. Twilio SMS Gateway (Alternative fallback)
   const twilioSid = process.env.TWILIO_ACCOUNT_SID;
   const twilioAuth = process.env.TWILIO_AUTH_TOKEN;
   const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
@@ -54,7 +78,7 @@ export async function sendMobileOtpSms(mobileNumber: string, otp: string): Promi
       const body = new URLSearchParams({
         To: `+91${cleanNumber}`,
         From: twilioFrom,
-        Body: `Your Golden Food Bowl verification code is: ${otp}. Valid for 10 minutes.`,
+        Body: `Your Golden Food Bowl verification code is: ${otp}. Valid for 10 minutes. Do not share this code with anyone.`,
       });
 
       const response = await fetch(endpoint, {
@@ -67,15 +91,20 @@ export async function sendMobileOtpSms(mobileNumber: string, otp: string): Promi
       });
 
       if (response.ok) {
-        console.log(`✅ [SMS Gateway - Twilio] OTP ${otp} delivered to +91 ${cleanNumber}`);
         return { sent: true, provider: 'Twilio' };
+      } else {
+        const errorData = (await response.json()) as any;
+        return { sent: false, provider: 'Twilio', error: errorData?.message || 'Twilio SMS failed' };
       }
     } catch (err: any) {
-      console.error('❌ [Twilio Request Failed]:', err.message);
+      return { sent: false, provider: 'Twilio', error: err.message };
     }
   }
 
-  // Fallback / Development mode
-  console.log(`📱 [SMS Simulated] OTP generated for +91 ${cleanNumber}: ${otp}`);
-  return { sent: false, provider: 'local_simulation' };
+  // No SMS provider configured
+  return {
+    sent: false,
+    provider: 'none',
+    error: 'SMS Gateway credentials (FAST2SMS_API_KEY) not configured on server.',
+  };
 }

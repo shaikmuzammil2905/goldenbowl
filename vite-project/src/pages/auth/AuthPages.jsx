@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Phone, UserRound, ShieldCheck, Car, FileText, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { registerCustomer, registerDeliveryPartner } from '../../services/prototypeStore';
 import { usePrototypeContext } from '../../context/PrototypeContext';
 import { authStorage } from '../../services/storage/authStorage';
@@ -66,9 +66,17 @@ function EmailOtpSection({ onLogin }) {
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((c) => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const handleSendOtp = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+    if (cooldown > 0) return;
     setError('');
     setLoading(true);
     try {
@@ -80,34 +88,36 @@ function EmailOtpSection({ onLogin }) {
       const data = await res.json();
       if (data.success) {
         setEmailOtpSent(true);
+        setCooldown(60);
       } else {
-        setError(data.message || 'Failed to send OTP. Please try again.');
+        setError(data.message || 'Unable to send verification code. Please try again.');
       }
     } catch {
-      setError('Network error. Please check your connection and try again.');
+      setError('Network connection error. Please check your internet connection.');
     }
     setLoading(false);
   };
 
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
+    if (emailOtp.replace(/\D/g, '').length !== 6) return;
     setError('');
     setLoading(true);
     try {
       const res = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), otp: emailOtp }),
+        body: JSON.stringify({ email: email.trim(), otp: emailOtp.trim() }),
       });
       const data = await res.json();
-      if (data.success) {
-        onLogin({ email: email.trim(), name: data.data?.user?.name || email.split('@')[0] });
+      if (data.success && data.data?.user) {
+        onLogin({ email: email.trim(), name: data.data.user.name });
       } else {
-        setError(data.message || 'Invalid or expired OTP. Try again.');
+        setError(data.message || 'Invalid verification code. Please try again.');
         setEmailOtp('');
       }
     } catch {
-      setError('Verification failed. Check your connection.');
+      setError('Verification request failed. Please check your connection.');
     }
     setLoading(false);
   };
@@ -145,7 +155,7 @@ function EmailOtpSection({ onLogin }) {
           disabled={!email || loading}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
         >
-          {loading ? <><Loader2 size={16} className="animate-spin" /> Sending OTP...</> : <>✉️ Send OTP to Email →</>}
+          {loading ? <><Loader2 size={16} className="animate-spin" /> Sending Code...</> : <>Send Email Verification Code →</>}
         </button>
         <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
           A 6-digit verification code will be sent to your inbox
@@ -157,8 +167,8 @@ function EmailOtpSection({ onLogin }) {
   return (
     <form className="clean-form" onSubmit={handleVerifyOtp}>
       <p className="csi-otp-sent">
-        OTP sent to <strong>{email}</strong>
-        <br /><small style={{ color: '#94a3b8', fontWeight: 400 }}>Check your inbox &amp; spam folder</small>
+        Verification code sent to <strong>{email}</strong>
+        <br /><small style={{ color: '#94a3b8', fontWeight: 400 }}>Please check your inbox &amp; spam folder</small>
       </p>
       <div className="csi-otp-row">
         {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -180,7 +190,7 @@ function EmailOtpSection({ onLogin }) {
         disabled={emailOtp.replace(/\s/g, '').length !== 6 || loading}
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
       >
-        {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : <>✓ Verify &amp; Sign In</>}
+        {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : <>Verify &amp; Sign In ✓</>}
       </button>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
         <button
@@ -193,11 +203,11 @@ function EmailOtpSection({ onLogin }) {
         <button
           type="button"
           className="csi-back-link"
-          disabled={loading}
+          disabled={loading || cooldown > 0}
           onClick={handleSendOtp}
-          style={{ color: '#d97706' }}
+          style={{ color: cooldown > 0 ? '#94a3b8' : '#d97706' }}
         >
-          Resend OTP
+          {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend Code'}
         </button>
       </div>
     </form>
@@ -211,16 +221,20 @@ function MobileOtpSection({ onLogin }) {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const [hint, setHint] = useState('');
+  const [cooldown, setCooldown] = useState(0);
 
   const mobileOk = /^\d{10}$/.test(mobile);
 
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((c) => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
   const handleSendMobileOtp = async (e) => {
-    e.preventDefault();
-    if (!mobileOk) return;
+    if (e) e.preventDefault();
+    if (!mobileOk || cooldown > 0) return;
     setError('');
-    setHint('');
     setLoading(true);
     try {
       const res = await fetch('/api/auth/send-otp', {
@@ -231,40 +245,36 @@ function MobileOtpSection({ onLogin }) {
       const data = await res.json();
       if (data.success) {
         setSent(true);
-        if (data.otpHint) {
-          setHint(data.otpHint);
-          setMobileOtp(data.otpHint);
-        }
+        setCooldown(60);
       } else {
-        setError(data.message || 'Failed to send OTP to mobile.');
+        setError(data.message || 'Unable to send SMS verification code. Please check your number.');
       }
     } catch {
-      // Fallback
-      setSent(true);
+      setError('Network connection error. Please check your internet connection.');
     }
     setLoading(false);
   };
 
   const handleVerifyMobileOtp = async (e) => {
     e.preventDefault();
-    if (mobileOtp.length !== 6) return;
+    if (mobileOtp.replace(/\D/g, '').length !== 6) return;
     setError('');
     setLoading(true);
     try {
       const res = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile, otp: mobileOtp }),
+        body: JSON.stringify({ mobile, otp: mobileOtp.trim() }),
       });
       const data = await res.json();
-      if (data.success) {
-        onLogin({ mobile, name: data.data?.user?.name || `Customer ${mobile.slice(-4)}` });
+      if (data.success && data.data?.user) {
+        onLogin({ mobile, name: data.data.user.name || `Customer ${mobile.slice(-4)}` });
       } else {
-        setError(data.message || 'Invalid or expired OTP code.');
+        setError(data.message || 'Invalid or expired verification code. Please try again.');
         setMobileOtp('');
       }
     } catch {
-      onLogin({ mobile, name: `Customer ${mobile.slice(-4)}` });
+      setError('Verification request failed. Please check your connection.');
     }
     setLoading(false);
   };
@@ -306,15 +316,21 @@ function MobileOtpSection({ onLogin }) {
           disabled={!mobileOk || loading}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
         >
-          {loading ? <><Loader2 size={16} className="animate-spin" /> Sending OTP...</> : <>Send Mobile OTP →</>}
+          {loading ? <><Loader2 size={16} className="animate-spin" /> Sending SMS Code...</> : <>Send SMS Code →</>}
         </button>
+        <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
+          A 6-digit SMS verification code will be sent to your phone
+        </p>
       </form>
     );
   }
 
   return (
     <form className="clean-form" onSubmit={handleVerifyMobileOtp}>
-      <p className="csi-otp-sent">OTP sent to <strong>+91 {mobile}</strong></p>
+      <p className="csi-otp-sent">
+        Verification code sent to <strong>+91 {mobile}</strong>
+        <br /><small style={{ color: '#94a3b8', fontWeight: 400 }}>Please check your SMS messages</small>
+      </p>
       <div className="csi-otp-row">
         {[0, 1, 2, 3, 4, 5].map((i) => (
           <input
@@ -352,11 +368,11 @@ function MobileOtpSection({ onLogin }) {
         <button
           type="button"
           className="csi-back-link"
-          disabled={loading}
+          disabled={loading || cooldown > 0}
           onClick={handleSendMobileOtp}
-          style={{ color: '#d97706' }}
+          style={{ color: cooldown > 0 ? '#94a3b8' : '#d97706' }}
         >
-          Resend OTP
+          {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend SMS Code'}
         </button>
       </div>
     </form>
