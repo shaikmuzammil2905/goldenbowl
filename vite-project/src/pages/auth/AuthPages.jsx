@@ -212,12 +212,15 @@ function MobileOtpSection({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [hint, setHint] = useState('');
+
   const mobileOk = /^\d{10}$/.test(mobile);
 
   const handleSendMobileOtp = async (e) => {
     e.preventDefault();
     if (!mobileOk) return;
     setError('');
+    setHint('');
     setLoading(true);
     try {
       const res = await fetch('/api/auth/send-otp', {
@@ -228,11 +231,15 @@ function MobileOtpSection({ onLogin }) {
       const data = await res.json();
       if (data.success) {
         setSent(true);
+        if (data.otpHint) {
+          setHint(data.otpHint);
+          setMobileOtp(data.otpHint);
+        }
       } else {
         setError(data.message || 'Failed to send OTP to mobile.');
       }
     } catch {
-      // Fallback: Proceed to OTP screen
+      // Fallback
       setSent(true);
     }
     setLoading(false);

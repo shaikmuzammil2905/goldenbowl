@@ -30,6 +30,7 @@ export function DeliveryPartnerSignInPage() {
       const data = await res.json();
       if (data.success) {
         setSent(true);
+        if (data.otpHint) setOtp(data.otpHint);
       } else {
         setError(data.message || 'Failed to send OTP.');
       }

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types/index.js';
 import { UserRepository } from '../repositories/userRepository.js';
 import { sendOtpEmail } from '../services/emailService.js';
+import { sendMobileOtpSms } from '../services/smsService.js';
 import { prisma } from '../config/prisma.js';
 
 export class AuthController {
@@ -34,7 +35,7 @@ export class AuthController {
   }
 
   // POST /api/auth/send-otp
-  // Generates a 6-digit OTP, stores it, and sends via Email SMTP or Mobile SMS
+  // Generates a 6-digit OTP, stores it, and sends via Email SMTP or Mobile SMS Gateway
   static async sendOtp(req: Request, res: Response, next: NextFunction) {
     try {
       const { email, mobile, identifier } = req.body;
@@ -45,7 +46,7 @@ export class AuthController {
       }
 
       const isEmail = target.includes('@');
-      const normalizedTarget = isEmail ? target.toLowerCase() : target.replace(/\D/g, '').slice(0, 10);
+      const normalizedTarget = isEmail ? target.toLowerCase() : target.replace(/\D/g, '').slice(-10);
 
       if (!isEmail && normalizedTarget.length !== 10) {
         return res.status(400).json({ success: false, message: 'Please enter a valid 10-digit mobile number.' });
@@ -61,10 +62,12 @@ export class AuthController {
         data: { used: true },
       });
 
-      // Save the new OTP
+      // Save the new OTP in database
       await prisma.otpCode.create({
         data: { email: normalizedTarget, otp, expiresAt },
       });
+
+      let smsResult = null;
 
       if (isEmail) {
         // Look up the user's name for a personalized email (optional)
@@ -72,14 +75,21 @@ export class AuthController {
         // Send email via Nodemailer SMTP
         await sendOtpEmail(normalizedTarget, otp, user?.name);
       } else {
-        console.log(`📱 [SMS OTP] OTP for +91 ${normalizedTarget}: ${otp}`);
+        // Send SMS to physical phone number via Fast2SMS / Twilio
+        smsResult = await sendMobileOtpSms(normalizedTarget, otp);
       }
+
+      const isRealSmsSent = smsResult?.sent === true;
 
       res.status(200).json({
         success: true,
         message: isEmail
           ? `OTP sent to ${normalizedTarget}. Check your inbox.`
-          : `OTP sent to +91 ${normalizedTarget}.`,
+          : (isRealSmsSent
+              ? `Verification code sent via SMS to +91 ${normalizedTarget}.`
+              : `OTP code generated for +91 ${normalizedTarget}.`),
+        // Provide the generated OTP for instant verification if SMS gateway is not yet active
+        otpHint: !isEmail && !isRealSmsSent ? otp : undefined,
       });
     } catch (error) {
       next(error);
@@ -98,7 +108,7 @@ export class AuthController {
       }
 
       const isEmail = target.includes('@');
-      const normalizedTarget = isEmail ? target.toLowerCase() : target.replace(/\D/g, '').slice(0, 10);
+      const normalizedTarget = isEmail ? target.toLowerCase() : target.replace(/\D/g, '').slice(-10);
 
       // Find a valid (not-expired, not-used) OTP record
       const record = await prisma.otpCode.findFirst({
@@ -113,7 +123,7 @@ export class AuthController {
       if (!record) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid or expired OTP. Please request a new one.',
+          message: 'Invalid or expired verification code. Please request a new one.',
         });
       }
 
@@ -138,7 +148,7 @@ export class AuthController {
 
       res.status(200).json({
         success: true,
-        message: 'OTP verified. Welcome to Golden Food Bowl!',
+        message: 'Verification successful. Welcome to Golden Food Bowl!',
         data: {
           user,
           token: `token-${Date.now()}-${user.id}`,
