@@ -3,6 +3,7 @@ import { Phone, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { MobileStatusBar } from '../../layouts/CustomerLayout';
 import { authStorage } from '../../services/storage/authStorage';
+import { apiClient } from '../../services/api/apiClient';
 import './auth.css';
 
 const LOGO = 'https://res.cloudinary.com/dwmjz9csc/image/upload/v1787120716/image-removebg-preview_e1wfil.png';
@@ -30,20 +31,18 @@ export function DeliveryPartnerSignInPage() {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/send-otp', {
+      const data = await apiClient('/auth/send-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile }),
+        body: { mobile: mobile.trim() },
       });
-      const data = await res.json();
       if (data.success) {
         setSent(true);
         setCooldown(60);
       } else {
         setError(data.message || 'Unable to send SMS verification code. Please try again.');
       }
-    } catch {
-      setError('Network connection error. Please check your internet connection.');
+    } catch (err) {
+      setError(err.message || 'Unable to reach SMS server. Please check your connection.');
     }
     setLoading(false);
   };
@@ -54,21 +53,19 @@ export function DeliveryPartnerSignInPage() {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/verify-otp', {
+      const data = await apiClient('/auth/verify-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile, otp: otp.trim() }),
+        body: { mobile: mobile.trim(), otp: otp.trim() },
       });
-      const data = await res.json();
       if (data.success && data.data?.user) {
-        authStorage.setDeliveryAuth({ mobile, role: 'delivery' });
+        authStorage.setDeliveryAuth({ mobile: mobile.trim(), role: 'delivery' });
         navigate('/delivery/dashboard');
       } else {
         setError(data.message || 'Invalid verification code. Please try again.');
         setOtp('');
       }
-    } catch {
-      setError('Verification request failed. Please check your connection.');
+    } catch (err) {
+      setError(err.message || 'Verification request failed. Please check your connection.');
     }
     setLoading(false);
   };

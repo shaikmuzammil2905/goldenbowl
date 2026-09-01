@@ -78,4 +78,19 @@ export const authApi = {
       },
     });
   },
+
+  async sendOtp({ email, mobile }) {
+    return apiClient('/auth/send-otp', {
+      method: 'POST',
+      body: { email, mobile },
+    });
+  },
+
+  async verifyOtp({ email, mobile, otp }) {
+    return apiClient('/auth/verify-otp', {
+      method: 'POST',
+      body: { email, mobile, otp },
+    });
+  },
 };
+

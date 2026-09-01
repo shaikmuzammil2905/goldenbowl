@@ -6,6 +6,7 @@ import { usePrototypeContext } from '../../context/PrototypeContext';
 import { authStorage } from '../../services/storage/authStorage';
 import { MobileStatusBar } from '../../layouts/CustomerLayout';
 import { openRazorpayCheckout } from '../../services/razorpay';
+import { apiClient } from '../../services/api/apiClient';
 import './auth.css';
 import './customer-signin-mobile.css';
 
@@ -80,20 +81,18 @@ function EmailOtpSection({ onLogin }) {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/send-otp', {
+      const data = await apiClient('/auth/send-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
+        body: { email: email.trim() },
       });
-      const data = await res.json();
       if (data.success) {
         setEmailOtpSent(true);
         setCooldown(60);
       } else {
         setError(data.message || 'Unable to send verification code. Please try again.');
       }
-    } catch {
-      setError('Network connection error. Please check your internet connection.');
+    } catch (err) {
+      setError(err.message || 'Network connection error. Please try again.');
     }
     setLoading(false);
   };
@@ -104,20 +103,18 @@ function EmailOtpSection({ onLogin }) {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/verify-otp', {
+      const data = await apiClient('/auth/verify-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), otp: emailOtp.trim() }),
+        body: { email: email.trim(), otp: emailOtp.trim() },
       });
-      const data = await res.json();
       if (data.success && data.data?.user) {
         onLogin({ email: email.trim(), name: data.data.user.name });
       } else {
         setError(data.message || 'Invalid verification code. Please try again.');
         setEmailOtp('');
       }
-    } catch {
-      setError('Verification request failed. Please check your connection.');
+    } catch (err) {
+      setError(err.message || 'Verification request failed. Please check your code.');
     }
     setLoading(false);
   };
@@ -237,20 +234,18 @@ function MobileOtpSection({ onLogin }) {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/send-otp', {
+      const data = await apiClient('/auth/send-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile }),
+        body: { mobile: mobile.trim() },
       });
-      const data = await res.json();
       if (data.success) {
         setSent(true);
         setCooldown(60);
       } else {
         setError(data.message || 'Unable to send SMS verification code. Please check your number.');
       }
-    } catch {
-      setError('Network connection error. Please check your internet connection.');
+    } catch (err) {
+      setError(err.message || 'Unable to reach SMS server. Please try again.');
     }
     setLoading(false);
   };
@@ -261,20 +256,18 @@ function MobileOtpSection({ onLogin }) {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/verify-otp', {
+      const data = await apiClient('/auth/verify-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile, otp: mobileOtp.trim() }),
+        body: { mobile: mobile.trim(), otp: mobileOtp.trim() },
       });
-      const data = await res.json();
       if (data.success && data.data?.user) {
         onLogin({ mobile, name: data.data.user.name || `Customer ${mobile.slice(-4)}` });
       } else {
         setError(data.message || 'Invalid or expired verification code. Please try again.');
         setMobileOtp('');
       }
-    } catch {
-      setError('Verification request failed. Please check your connection.');
+    } catch (err) {
+      setError(err.message || 'Verification request failed. Please check your connection.');
     }
     setLoading(false);
   };
