@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { AuthenticatedRequest } from '../types/index.js';
 import { UserRepository } from '../repositories/userRepository.js';
-import { sendOtpEmail } from '../services/emailService.js';
+import { sendOtpEmail, sendPasswordResetEmail } from '../services/emailService.js';
 import { sendMobileOtpSms, normalizeIndianMobile } from '../services/smsService.js';
 import { prisma } from '../config/prisma.js';
 
@@ -647,6 +647,116 @@ export class AuthController {
           role: user.role,
         },
         token,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ── PASSWORD RESET REQUEST: POST /api/auth/request-reset ────────────────────
+  static async requestPasswordReset(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { identifier } = req.body;
+      const rawTarget = (identifier || '').toString().trim();
+
+      if (!rawTarget) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enter your registered email or mobile number.',
+        });
+      }
+
+      const isEmail = rawTarget.includes('@');
+      let normalizedIdentifier: string;
+
+      if (isEmail) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(rawTarget)) {
+          return res.status(400).json({ success: false, message: 'Please enter a valid email address.' });
+        }
+        normalizedIdentifier = rawTarget.toLowerCase();
+      } else {
+        const cleanPhone = normalizeIndianMobile(rawTarget);
+        if (!cleanPhone) {
+          return res.status(400).json({
+            success: false,
+            message: 'Please enter a valid 10-digit mobile number.',
+          });
+        }
+        normalizedIdentifier = cleanPhone;
+      }
+
+      // Rate Limiting: 60-second cooldown between reset requests
+      const now = Date.now();
+      const recentRequest = await prisma.otpCode.findFirst({
+        where: {
+          identifier: `reset_${normalizedIdentifier}`,
+          createdAt: { gt: new Date(now - 60 * 1000) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (recentRequest) {
+        return res.status(429).json({
+          success: false,
+          message: 'Please wait 60 seconds before requesting another password reset.',
+        });
+      }
+
+      // Look up the user (don't reveal if account exists for security)
+      const user = await UserRepository.findByIdentifier(normalizedIdentifier);
+
+      // Generate a secure reset token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const hashedToken = crypto.createHmac('sha256', OTP_SECRET).update(resetToken).digest('hex');
+      const expiresAt = new Date(now + 15 * 60 * 1000); // 15 minutes
+
+      // Invalidate any previous reset tokens for this identifier
+      await prisma.otpCode.updateMany({
+        where: { identifier: `reset_${normalizedIdentifier}`, used: false },
+        data: { used: true },
+      });
+
+      // Store the hashed token
+      await prisma.otpCode.create({
+        data: {
+          identifier: `reset_${normalizedIdentifier}`,
+          identifierType: 'PASSWORD_RESET',
+          email: isEmail ? normalizedIdentifier : undefined,
+          otp: hashedToken,
+          expiresAt,
+          attempts: 0,
+        },
+      });
+
+      // Only send the email/SMS if the user actually exists
+      if (user) {
+        if (isEmail) {
+          try {
+            await sendPasswordResetEmail(normalizedIdentifier, resetToken, user.name);
+          } catch (emailErr: any) {
+            console.error('Failed to send password reset email:', emailErr.message);
+            // Don't fail the request — security best practice
+          }
+        } else {
+          // For mobile users, send an SMS with a short message
+          const { sendMobileOtpSms: sendSms } = await import('../services/smsService.js');
+          // We use the first 6 digits of the token as a "reset code" for SMS
+          const resetCode = resetToken.slice(0, 6).toUpperCase();
+          try {
+            await sendSms(normalizedIdentifier, resetCode);
+          } catch (smsErr: any) {
+            console.error('Failed to send password reset SMS:', smsErr.message);
+          }
+        }
+      }
+
+      // Always return success to prevent account enumeration
+      return res.status(200).json({
+        success: true,
+        message: isEmail
+          ? `If an account exists for ${normalizedIdentifier}, a password reset link has been sent to your email.`
+          : `If an account exists for +91 ${normalizedIdentifier}, recovery instructions have been sent via SMS.`,
       });
     } catch (error) {
       next(error);

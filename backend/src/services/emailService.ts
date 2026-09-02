@@ -211,3 +211,163 @@ export async function sendOtpEmail(
   // Log delivery confirmation without revealing OTP or credentials
   console.log(`📧 OTP email dispatched to ${toEmail} [messageId: ${info.messageId}]`);
 }
+
+/**
+ * Sends a password reset email with a unique reset link.
+ *
+ * @param toEmail    Recipient email address (already validated by caller)
+ * @param resetToken The unique reset token embedded in the reset URL
+ * @param userName   Optional display name for greeting personalization
+ */
+export async function sendPasswordResetEmail(
+  toEmail: string,
+  resetToken: string,
+  userName?: string
+): Promise<void> {
+  if (missingVars.length > 0) {
+    throw new Error(
+      `Email service is not configured (missing: ${missingVars.join(', ')}). Please contact support.`
+    );
+  }
+
+  const displayName = userName
+    ? userName.charAt(0).toUpperCase() + userName.slice(1)
+    : 'there';
+
+  // Build reset URL — use frontend URL from env
+  const frontendOrigin = (process.env.FRONTEND_URL || 'https://goldenbowl.vercel.app').split(',')[0].trim();
+  const resetUrl = `${frontendOrigin}/customer/reset-password?token=${resetToken}&email=${encodeURIComponent(toEmail)}`;
+
+  const mailOptions = {
+    from: env.SMTP_FROM,
+    to: toEmail,
+    subject: 'Reset your Golden Food Bowl password',
+    text: [
+      `Hi ${displayName},`,
+      '',
+      'We received a request to reset your Golden Food Bowl account password.',
+      '',
+      `Click the link below to set a new password:`,
+      resetUrl,
+      '',
+      'This link expires in 15 minutes.',
+      'If you did not request a password reset, you can safely ignore this email.',
+      '',
+      '— Golden Food Bowl Team',
+      'Fresh • Tasty • Fast | goldenfoodbowl.com',
+    ].join('\n'),
+    html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reset Your Password – Golden Food Bowl</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="480" cellpadding="0" cellspacing="0"
+               style="background:#ffffff;border-radius:20px;overflow:hidden;
+                      box-shadow:0 4px 24px rgba(0,0,0,0.09);max-width:480px;width:100%;">
+
+          <!-- ── Header ─────────────────────────────────────── -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);
+                        padding:36px 32px;text-align:center;">
+              <img
+                src="https://res.cloudinary.com/dwmjz9csc/image/upload/v1787120716/image-removebg-preview_e1wfil.png"
+                alt="Golden Food Bowl"
+                width="64"
+                style="height:64px;width:auto;display:block;margin:0 auto 12px;" />
+              <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:900;
+                          letter-spacing:1px;line-height:1.2;">GOLDEN FOOD BOWL</h1>
+              <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:13px;">
+                Fresh &bull; Tasty &bull; Fast
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Body ──────────────────────────────────────── -->
+          <tr>
+            <td style="padding:36px 32px;">
+              <p style="font-size:16px;color:#374151;margin:0 0 6px;font-weight:600;">
+                Hi ${displayName} 👋
+              </p>
+              <p style="font-size:15px;color:#6b7280;margin:0 0 28px;line-height:1.6;">
+                We received a request to reset your
+                <strong style="color:#d97706;">Golden Food Bowl</strong> account password.
+                Click the button below to set a new password.
+              </p>
+
+              <!-- Reset Button -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                <tr>
+                  <td align="center">
+                    <a href="${resetUrl}"
+                       style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#d97706);
+                              color:#ffffff;text-decoration:none;padding:16px 40px;
+                              border-radius:12px;font-size:16px;font-weight:800;
+                              letter-spacing:0.5px;box-shadow:0 4px 14px rgba(217,119,6,0.4);">
+                      🔐 Reset My Password
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+                <tr>
+                  <td style="background:#fffbeb;border:1px solid #fde68a;
+                              border-radius:10px;padding:12px 16px;">
+                    <p style="font-size:12px;color:#92400e;margin:0;line-height:1.5;">
+                      If the button doesn't work, copy and paste this link into your browser:<br/>
+                      <a href="${resetUrl}" style="color:#d97706;word-break:break-all;font-size:11px;">${resetUrl}</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:#f0fdf4;border-left:3px solid #22c55e;
+                              border-radius:8px;padding:12px 16px;">
+                    <p style="font-size:13px;color:#166534;margin:0;">
+                      ⏱ &nbsp;This link expires in <strong>15 minutes</strong>.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="font-size:13px;color:#9ca3af;margin:16px 0 0;line-height:1.5;">
+                🔒 If you didn't request this, you can safely ignore this email.
+                Your password will remain unchanged.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Footer ─────────────────────────────────────── -->
+          <tr>
+            <td style="background:#f9fafb;border-top:1px solid #e5e7eb;
+                        padding:20px 32px;text-align:center;">
+              <p style="font-size:12px;color:#6b7280;margin:0 0 4px;">
+                &copy; 2026 Golden Food Bowl. All rights reserved.
+              </p>
+              <p style="font-size:11px;color:#9ca3af;margin:0;">
+                Bengaluru, India &nbsp;&bull;&nbsp;
+                <a href="https://goldenfoodbowl.com"
+                   style="color:#d97706;text-decoration:none;">goldenfoodbowl.com</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+  };
+
+  const info = await transporter.sendMail(mailOptions);
+  console.log(`📧 Password reset email dispatched to ${toEmail} [messageId: ${info.messageId}]`);
+}

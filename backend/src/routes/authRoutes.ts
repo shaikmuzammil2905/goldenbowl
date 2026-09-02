@@ -16,6 +16,9 @@ router.post('/verify-otp', AuthController.verifyOtp);
 router.post('/send-mobile-otp', AuthController.sendMobileOtp);
 router.post('/verify-mobile-otp', AuthController.verifyMobileOtp);
 
+// ── Password Reset ──────────────────────────────────────────────────────────
+router.post('/request-reset', AuthController.requestPasswordReset);
+
 // ── Authenticated Session Endpoints ─────────────────────────────────────────
 router.post('/logout', authenticateToken, AuthController.logout);
 router.get('/me', authenticateToken, AuthController.me);
