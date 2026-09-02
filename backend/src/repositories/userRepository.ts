@@ -50,7 +50,7 @@ export class UserRepository {
       data: {
         email: data.email.toLowerCase().trim(),
         name: data.name.trim(),
-        role: data.role || 'CUSTOMER',
+        role: (data.role?.toUpperCase() as any) || 'CUSTOMER',
         mobile: data.mobile?.trim() || null,
         password: data.password || null,
         provider: data.provider || 'email',
@@ -68,7 +68,7 @@ export class UserRepository {
 
   static async listUsers(role?: string) {
     return prisma.user.findMany({
-      where: role ? { role } : undefined,
+      where: role ? { role: (role.toUpperCase() as any) } : undefined,
       orderBy: { createdAt: 'desc' },
     });
   }

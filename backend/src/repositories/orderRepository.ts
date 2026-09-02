@@ -4,7 +4,7 @@ export class OrderRepository {
   static async findAll(params: { status?: string; customerId?: string }) {
     return prisma.order.findMany({
       where: {
-        status: params.status,
+        status: (params.status as any),
         customerId: params.customerId,
       },
       include: {
@@ -59,7 +59,7 @@ export class OrderRepository {
   static async updateStatus(id: string, status: string) {
     return prisma.order.update({
       where: { id },
-      data: { status },
+      data: { status: (status as any) },
       include: { items: true, branch: true, driver: true },
     });
   }

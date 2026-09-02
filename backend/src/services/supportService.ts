@@ -25,7 +25,7 @@ export class SupportService {
         customerId: data.customerId,
         customerName: data.customerName || 'Guest Customer',
         subject: data.subject,
-        priority: data.priority || 'Normal',
+        priority: ((data.priority || 'Normal') as any),
         status: 'OPEN',
       },
     });
@@ -37,7 +37,7 @@ export class SupportService {
 
     return prisma.supportIssue.update({
       where: { id },
-      data: { status },
+      data: { status: (status as any) },
     });
   }
 }

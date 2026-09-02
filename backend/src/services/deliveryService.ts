@@ -46,8 +46,8 @@ export class DeliveryService {
     return prisma.deliveryPartner.update({
       where: { id },
       data: {
-        verificationStatus,
-        feeStatus,
+        verificationStatus: (verificationStatus as any),
+        feeStatus: (feeStatus as any),
         documentsVerified: verificationStatus === 'VERIFIED',
       },
     });

@@ -1,10 +1,5 @@
-// ─── Golden Food Bowl — Prisma Schema ───────────────────────────────────────
-// LOCAL DEV: SQLite    |    PRODUCTION: PostgreSQL
-// Original PostgreSQL URL (for production deployment):
-//   postgresql://postgres:GoldenBowl2026!@goldenbowl-db.c56kmw20ae09.eu-north-1.rds.amazonaws.com:5432/goldenbowl?schema=public
-
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -12,15 +7,63 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum Role {
+  ADMIN
+  SUPPORT
+  DELIVERY
+  CUSTOMER
+}
+
+enum OrderStatus {
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  ASSIGNED
+  PICKED_UP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum FeeStatus {
+  PENDING
+  PAID
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum IssuePriority {
+  Low
+  Normal
+  High
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+}
+
 model User {
   id               String            @id @default(uuid())
   cognitoSub       String?           @unique
   email            String            @unique
-  mobile           String?           @unique
+  mobile           String?
   name             String
   password         String?
-  role             String            @default("CUSTOMER")
-  provider         String            @default("email")
+  role             Role              @default(CUSTOMER)
+  provider         String            @default("mobile")
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   orders           Order[]           @relation("CustomerOrders")
@@ -63,14 +106,14 @@ model Product {
   categoryId    String
   category      Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   name          String
-  price         Decimal
-  originalPrice Decimal?
+  price         Decimal     @db.Decimal(10, 2)
+  originalPrice Decimal?    @db.Decimal(10, 2)
   calories      Int         @default(0)
   portion       String      @default("1 portion")
   rating        Float       @default(4.5)
   imageUrl      String
   description   String
-  ingredients   String      @default("[]")
+  ingredients   String[]    @default([])
   available     Boolean     @default(true)
   veg           Boolean     @default(true)
   vegan         Boolean     @default(false)
@@ -91,8 +134,8 @@ model Order {
   driverId      String?
   driver        DeliveryPartner? @relation(fields: [driverId], references: [id], onDelete: SetNull)
   customerName  String
-  totalAmount   Decimal
-  status        String           @default("CONFIRMED")
+  totalAmount   Decimal          @db.Decimal(10, 2)
+  status        OrderStatus      @default(CONFIRMED)
   orderType     String           @default("Delivery")
   etaMinutes    Int              @default(25)
   createdAt     DateTime         @default(now())
@@ -111,44 +154,44 @@ model OrderItem {
   productId Int
   product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
   quantity  Int      @default(1)
-  unitPrice Decimal
-  subtotal  Decimal
+  unitPrice Decimal  @db.Decimal(10, 2)
+  subtotal  Decimal  @db.Decimal(10, 2)
 
   @@map("order_items")
 }
 
 model SupportIssue {
-  id           String   @id
-  orderId      String?
-  order        Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  customerId   String?
-  customer     User?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  customerName String   @default("Guest Customer")
-  subject      String
-  priority     String   @default("Normal")
-  status       String   @default("OPEN")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id         String        @id
+  orderId    String?
+  order      Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customerId String?
+  customer   User?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName String      @default("Guest Customer")
+  subject    String
+  priority   IssuePriority @default(Normal)
+  status     IssueStatus   @default(OPEN)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   @@map("support_issues")
 }
 
 model DeliveryPartner {
-  id                 String   @id @default(uuid())
-  userId             String?  @unique
-  user               User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String             @id @default(uuid())
+  userId             String?            @unique
+  user               User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
   name               String
   mobile             String
-  vehicle            String   @default("Bike")
-  verificationStatus String   @default("PENDING")
-  documentsVerified  Boolean  @default(false)
-  feeAmount          Decimal  @default(700.00)
-  feeStatus          String   @default("PENDING")
-  trips              Int      @default(0)
-  rating             Float    @default(5.0)
-  earnings           Decimal  @default(0.00)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  vehicle            String             @default("Bike")
+  verificationStatus VerificationStatus @default(PENDING)
+  documentsVerified  Boolean            @default(false)
+  feeAmount          Decimal            @default(700.00) @db.Decimal(10, 2)
+  feeStatus          FeeStatus          @default(PENDING)
+  trips              Int                @default(0)
+  rating             Float              @default(5.0)
+  earnings           Decimal            @default(0.00) @db.Decimal(10, 2)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
   assignedOrders     Order[]
 
   @@map("delivery_partners")
@@ -158,7 +201,7 @@ model Notification {
   id        String   @id @default(uuid())
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role      String   @default("CUSTOMER")
+  role      Role     @default(CUSTOMER)
   title     String
   message   String
   read      Boolean  @default(false)
@@ -168,14 +211,14 @@ model Notification {
 }
 
 model Payment {
-  id            String   @id @default(uuid())
+  id            String        @id @default(uuid())
   orderId       String
-  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  amount        Decimal
-  status        String   @default("SUCCESSFUL")
-  paymentMethod String   @default("UPI")
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount        Decimal       @db.Decimal(10, 2)
+  status        PaymentStatus @default(SUCCESSFUL)
+  paymentMethod String        @default("UPI")
   transactionId String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime      @default(now())
 
   @@map("payments")
 }
@@ -203,12 +246,12 @@ model AuditLog {
 
 model OtpCode {
   id             String   @id @default(uuid())
-  identifier     String   // Email or Phone number
-  identifierType String   @default("EMAIL") // EMAIL or MOBILE
-  email          String?  // Legacy compatibility
-  otp            String   // Cryptographic SHA-256 hash of the OTP
+  identifier     String   @default("")
+  identifierType String   @default("EMAIL")
+  email          String?
+  otp            String
   expiresAt      DateTime
-  attempts       Int      @default(0) // Max 5 verification attempts allowed
+  attempts       Int      @default(0)
   used           Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

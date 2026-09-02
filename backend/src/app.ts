@@ -15,7 +15,28 @@ app.use(helmet());
 // 2. CORS Security Configuration
 app.use(
   cors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+      if (!origin) return callback(null, true);
+      const allowedOrigins = [
+        'https://goldenfoodbowl.com',
+        'https://www.goldenfoodbowl.com',
+        'https://goldenbowl.vercel.app',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:3000',
+      ];
+      if (
+        allowedOrigins.indexOf(origin) !== -1 ||
+        origin.endsWith('.vercel.app') ||
+        origin.includes('localhost') ||
+        origin.includes('goldenfoodbowl.com')
+      ) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Permissive for prototype & production domain variations
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-user-role', 'x-user-email', 'Pragma', 'Cache-Control'],
@@ -25,7 +46,7 @@ app.use(
 // 3. Rate Limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 2000, // 2000 requests per IP per window (frontend polls every 30s = ~30 req/15min, mutations are additional)
+  max: 2000, // 2000 requests per IP per window
   message: { success: false, message: 'Too many requests from this IP, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -37,9 +58,13 @@ app.use(morgan(env.NODE_ENV === 'development' ? 'dev' : 'combined'));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 5. Health Check Endpoint
-app.get('/health', (req: Request, res: Response) => {
-  res.status(200).json({ status: 'ok' });
+// 5. Health Check Endpoints (Both /health and /api/health)
+app.get(['/health', '/api/health'], (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'goldenbowl-api',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // 6. Disable caching for dynamic API endpoints to ensure real-time cross-device sync

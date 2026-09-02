@@ -7,7 +7,7 @@ export class NotificationController {
     try {
       const { role } = req.query;
       const notifications = await prisma.notification.findMany({
-        where: role ? { role: (role as string).toUpperCase() } : undefined,
+        where: role ? { role: (role as string).toUpperCase() as any } : undefined,
         orderBy: { createdAt: 'desc' },
       });
       res.status(200).json({ success: true, data: notifications });
