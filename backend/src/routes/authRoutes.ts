@@ -1,21 +1,22 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/authController.js';
 import { authenticateToken } from '../middleware/auth.js';
-import { validateSchema, loginSchema } from '../validators/index.js';
 
 const router = Router();
 
-// Password-based login (email/phone + password)
+// ── Registration & Password Login ───────────────────────────────────────────
+router.post('/register', AuthController.register);
 router.post('/login', AuthController.login);
 
-// User registration (name + email/phone + password)
-router.post('/register', AuthController.register);
+// ── Email OTP Endpoints ──────────────────────────────────────────────────────
+router.post('/send-otp', AuthController.sendOtp);
+router.post('/verify-otp', AuthController.verifyOtp);
 
-// Email OTP login — 2-step flow
-router.post('/send-otp', AuthController.sendOtp);     // Step 1: generate & email OTP
-router.post('/verify-otp', AuthController.verifyOtp); // Step 2: verify OTP → return token
+// ── Mobile SMS OTP Endpoints ────────────────────────────────────────────────
+router.post('/send-mobile-otp', AuthController.sendMobileOtp);
+router.post('/verify-mobile-otp', AuthController.verifyMobileOtp);
 
-// Session routes
+// ── Authenticated Session Endpoints ─────────────────────────────────────────
 router.post('/logout', authenticateToken, AuthController.logout);
 router.get('/me', authenticateToken, AuthController.me);
 

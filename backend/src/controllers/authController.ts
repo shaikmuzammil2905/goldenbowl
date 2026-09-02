@@ -6,162 +6,203 @@ import { sendOtpEmail } from '../services/emailService.js';
 import { sendMobileOtpSms, normalizeIndianMobile } from '../services/smsService.js';
 import { prisma } from '../config/prisma.js';
 
-// Cryptographic HMAC-SHA256 hash helper for OTP storage
+// ── Security Helpers ──────────────────────────────────────────────────────────
+const OTP_SECRET = process.env.OTP_SECRET || 'goldenbowl_prod_otp_secret_key_2026';
+const PASSWORD_SALT = process.env.PASSWORD_SALT || 'goldenbowl_password_salt_2026';
+
+/**
+ * Cryptographic HMAC-SHA256 hash helper for OTP verification and storage.
+ * Ensures raw OTPs are NEVER stored in plaintext in the database.
+ */
 function hashOtp(identifier: string, rawOtp: string): string {
-  const secret = process.env.OTP_SECRET || 'goldenbowl_prod_otp_secret_key_2026';
-  return crypto.createHmac('sha256', secret).update(`${identifier}:${rawOtp}`).digest('hex');
+  return crypto.createHmac('sha256', OTP_SECRET).update(`${identifier.trim().toLowerCase()}:${rawOtp.trim()}`).digest('hex');
 }
 
-// Simple password hashing (SHA-256 with salt) for development
+/**
+ * Secure password hashing using PBKDF2 with SHA-512 and salt.
+ */
 function hashPassword(password: string): string {
-  const salt = process.env.PASSWORD_SALT || 'goldenbowl_password_salt_2026';
-  return crypto.createHash('sha256').update(`${salt}:${password}`).digest('hex');
+  return crypto.pbkdf2Sync(password, PASSWORD_SALT, 10000, 64, 'sha512').toString('hex');
+}
+
+/**
+ * Generates an authentication token.
+ */
+function generateToken(userId: string, role: string): string {
+  return `token-${Date.now()}-${userId}`;
 }
 
 export class AuthController {
-  // POST /api/auth/login — Email/Phone + Password login
+  // ── 1. REGISTRATION: POST /api/auth/register ────────────────────────────────
+  static async register(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { name, email, mobile, password } = req.body;
+
+      // 1. Validation: Name
+      if (!name || typeof name !== 'string' || name.trim().length < 2) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enter a valid full name (minimum 2 characters).',
+        });
+      }
+
+      // 2. Validation: Password
+      if (!password || typeof password !== 'string' || password.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password must be at least 6 characters long.',
+        });
+      }
+
+      // 3. Validation: At least Mobile or Email must be provided
+      const cleanEmail = email && typeof email === 'string' ? email.trim().toLowerCase() : null;
+      let cleanMobile = mobile && typeof mobile === 'string' ? mobile.trim() : null;
+
+      if (!cleanEmail && !cleanMobile) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide either a mobile number or email address.',
+        });
+      }
+
+      // Validate email format if provided
+      if (cleanEmail) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(cleanEmail)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Please enter a valid email address.',
+          });
+        }
+      }
+
+      // Validate and normalize mobile number if provided
+      if (cleanMobile) {
+        const normalized = normalizeIndianMobile(cleanMobile);
+        if (!normalized) {
+          return res.status(400).json({
+            success: false,
+            message: 'Please enter a valid 10-digit mobile number.',
+          });
+        }
+        cleanMobile = normalized;
+      }
+
+      // 4. Duplicate Checks
+      if (cleanEmail) {
+        const existingEmail = await UserRepository.findByEmail(cleanEmail);
+        if (existingEmail) {
+          return res.status(409).json({
+            success: false,
+            message: 'An account with this email address already exists. Please sign in.',
+          });
+        }
+      }
+
+      if (cleanMobile) {
+        const existingMobile = await UserRepository.findByMobile(cleanMobile);
+        if (existingMobile) {
+          return res.status(409).json({
+            success: false,
+            message: 'An account with this mobile number already exists. Please sign in.',
+          });
+        }
+      }
+
+      // 5. Create User
+      const finalEmail = cleanEmail || `${cleanMobile}@goldenbowl.in`;
+      const hashedPassword = hashPassword(password);
+
+      const user = await UserRepository.createUser({
+        name: name.trim(),
+        email: finalEmail,
+        mobile: cleanMobile || undefined,
+        password: hashedPassword,
+        role: 'CUSTOMER',
+        provider: cleanEmail ? 'email' : 'mobile',
+      });
+
+      const token = generateToken(user.id, user.role);
+
+      return res.status(201).json({
+        success: true,
+        message: 'Account created successfully! Welcome to Golden Food Bowl.',
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          mobile: user.mobile,
+          role: user.role,
+        },
+        token,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ── 2. PASSWORD LOGIN: POST /api/auth/login ──────────────────────────────────
   static async login(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { identifier, password, role = 'CUSTOMER' } = req.body;
+      const { identifier, email, mobile, password, role = 'CUSTOMER' } = req.body;
+      const targetIdentifier = (identifier || email || mobile || '').toString().trim();
 
-      if (!identifier || !password) {
+      if (!targetIdentifier || !password) {
         return res.status(400).json({
           success: false,
           message: 'Email/phone and password are required.',
         });
       }
 
-      const isEmail = identifier.includes('@');
-      let user;
+      const user = await UserRepository.findByIdentifier(targetIdentifier);
 
-      if (isEmail) {
-        user = await UserRepository.findByEmail(identifier.toLowerCase());
-      } else {
-        // Try finding by mobile number
-        const cleanPhone = normalizeIndianMobile(identifier);
-        if (cleanPhone) {
-          user = await UserRepository.findByMobile(cleanPhone);
-        }
-        if (!user) {
-          // Fallback: try as email
-          user = await UserRepository.findByEmail(`${identifier}@goldenbowl.in`);
-        }
-      }
-
+      // Generic authentication failure message to prevent account enumeration
       if (!user) {
         return res.status(401).json({
           success: false,
-          message: 'No account found with this email/phone. Please sign up first.',
+          message: 'Invalid login credentials. Please check your email/phone and password.',
         });
       }
 
-      // Check password
       if (!user.password) {
         return res.status(401).json({
           success: false,
-          message: 'No password set for this account. Please use OTP login or set a password.',
+          message: 'No password set for this account. Please sign in using OTP or reset your password.',
         });
       }
 
       const hashedInput = hashPassword(password);
-      if (hashedInput !== user.password) {
+      // Fallback check for legacy SHA256 hashed passwords
+      const legacyHashed = crypto.createHash('sha256').update(`${PASSWORD_SALT}:${password}`).digest('hex');
+      const isMatch = user.password === hashedInput || user.password === legacyHashed;
+
+      if (!isMatch) {
         return res.status(401).json({
           success: false,
-          message: 'Incorrect password. Please try again or use OTP login.',
+          message: 'Invalid login credentials. Please check your email/phone and password.',
         });
       }
 
-      res.status(200).json({
+      const token = generateToken(user.id, user.role);
+
+      return res.status(200).json({
         success: true,
         message: 'Login successful! Welcome back.',
-        data: {
-          user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile, role: user.role },
-          token: `token-${Date.now()}-${user.id}`,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          mobile: user.mobile,
+          role: user.role,
         },
+        token,
       });
     } catch (error) {
       next(error);
     }
   }
 
-  // POST /api/auth/register — Sign up with email/phone + password
-  static async register(req: Request, res: Response, next: NextFunction) {
-    try {
-      const { name, email, mobile, password } = req.body;
-
-      if (!name || !password) {
-        return res.status(400).json({
-          success: false,
-          message: 'Name and password are required.',
-        });
-      }
-
-      if (!email && !mobile) {
-        return res.status(400).json({
-          success: false,
-          message: 'Either email or mobile number is required.',
-        });
-      }
-
-      if (password.length < 6) {
-        return res.status(400).json({
-          success: false,
-          message: 'Password must be at least 6 characters.',
-        });
-      }
-
-      const userEmail = email
-        ? email.toLowerCase().trim()
-        : `${normalizeIndianMobile(mobile) || mobile}@goldenbowl.in`;
-
-      // Check if user already exists
-      const existing = await UserRepository.findByEmail(userEmail);
-      if (existing) {
-        // If user exists but has no password, set it
-        if (!existing.password) {
-          const hashed = hashPassword(password);
-          await UserRepository.updatePassword(existing.id, hashed);
-          return res.status(200).json({
-            success: true,
-            message: 'Password set successfully! You can now login.',
-            data: {
-              user: { id: existing.id, name: existing.name, email: existing.email, mobile: existing.mobile, role: existing.role },
-              token: `token-${Date.now()}-${existing.id}`,
-            },
-          });
-        }
-        return res.status(409).json({
-          success: false,
-          message: 'An account with this email/phone already exists. Please sign in.',
-        });
-      }
-
-      const hashedPassword = hashPassword(password);
-      const cleanMobile = mobile ? normalizeIndianMobile(mobile) : undefined;
-
-      const user = await UserRepository.createUser({
-        email: userEmail,
-        name: name.trim(),
-        mobile: cleanMobile || mobile,
-        password: hashedPassword,
-        role: 'CUSTOMER',
-      });
-
-      res.status(201).json({
-        success: true,
-        message: 'Account created successfully! Welcome to Golden Food Bowl.',
-        data: {
-          user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile, role: user.role },
-          token: `token-${Date.now()}-${user.id}`,
-        },
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  // POST /api/auth/send-otp
-  // Generates secure 6-digit OTP, stores cryptographic hash in DB, dispatches via SMS Gateway or Email SMTP
+  // ── 3. EMAIL OTP: POST /api/auth/send-otp ───────────────────────────────────
   static async sendOtp(req: Request, res: Response, next: NextFunction) {
     try {
       const { email, mobile, identifier } = req.body;
@@ -170,12 +211,13 @@ export class AuthController {
       if (!rawTarget) {
         return res.status(400).json({
           success: false,
-          message: 'A valid mobile number or email address is required.',
+          message: 'Please enter a valid email address.',
         });
       }
 
       const isEmail = rawTarget.includes('@');
       let normalizedIdentifier: string;
+      let identifierType: string;
 
       if (isEmail) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -183,24 +225,24 @@ export class AuthController {
           return res.status(400).json({ success: false, message: 'Please enter a valid email address.' });
         }
         normalizedIdentifier = rawTarget.toLowerCase();
+        identifierType = 'EMAIL';
       } else {
         const cleanPhone = normalizeIndianMobile(rawTarget);
         if (!cleanPhone) {
           return res.status(400).json({
             success: false,
-            message: 'Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).',
+            message: 'Please enter a valid 10-digit Indian mobile number.',
           });
         }
         normalizedIdentifier = cleanPhone;
+        identifierType = 'MOBILE';
       }
 
-      // ── RATE LIMITING ────────────────────────────────────────────────────────
+      // Rate Limiting: 60-second cooldown
       const now = Date.now();
-
-      // 1. Resend cooldown: Must wait 60 seconds between OTP requests
       const recentOtp = await prisma.otpCode.findFirst({
         where: {
-          email: normalizedIdentifier,
+          identifier: normalizedIdentifier,
           createdAt: { gt: new Date(now - 60 * 1000) },
         },
         orderBy: { createdAt: 'desc' },
@@ -213,10 +255,10 @@ export class AuthController {
         });
       }
 
-      // 2. Frequency limit: Maximum 5 OTP requests per identifier per 15 minutes
+      // Frequency limit: Maximum 5 OTP requests per 15 minutes
       const count15m = await prisma.otpCode.count({
         where: {
-          email: normalizedIdentifier,
+          identifier: normalizedIdentifier,
           createdAt: { gt: new Date(now - 15 * 60 * 1000) },
         },
       });
@@ -224,67 +266,66 @@ export class AuthController {
       if (count15m >= 5) {
         return res.status(429).json({
           success: false,
-          message: 'Too many OTP requests. Please try again in 15 minutes.',
+          message: 'Too many verification code requests. Please try again in 15 minutes.',
         });
       }
-      // ─────────────────────────────────────────────────────────────────────────
 
-      // Cryptographically secure 6-digit random OTP (100000 - 999999)
+      // Secure 6-digit random OTP (100000 - 999999)
       const rawOtp = String(crypto.randomInt(100000, 1000000));
       const hashedOtp = hashOtp(normalizedIdentifier, rawOtp);
-      const expiresAt = new Date(now + 10 * 60 * 1000); // 10 minutes expiry
+      const expiresAt = new Date(now + 5 * 60 * 1000); // 5 minutes expiration
 
-      // Invalidate any existing unused OTPs for this identifier
+      // Invalidate existing unused OTPs
       await prisma.otpCode.updateMany({
-        where: { email: normalizedIdentifier, used: false },
+        where: { identifier: normalizedIdentifier, used: false },
         data: { used: true },
       });
 
-      // Save securely hashed OTP into database
+      // Save hashed OTP
       await prisma.otpCode.create({
         data: {
-          email: normalizedIdentifier,
+          identifier: normalizedIdentifier,
+          identifierType,
+          email: isEmail ? normalizedIdentifier : undefined,
           otp: hashedOtp,
           expiresAt,
+          attempts: 0,
         },
       });
 
-      // ── DISPATCH ─────────────────────────────────────────────────────────────
+      // Dispatch
       if (isEmail) {
         const user = await UserRepository.findByEmail(normalizedIdentifier);
         try {
           await sendOtpEmail(normalizedIdentifier, rawOtp, user?.name);
         } catch (emailErr: any) {
-          // If sending email fails, invalidate the OTP record and fail securely
+          // Invalidate on dispatch failure
           await prisma.otpCode.updateMany({
-            where: { email: normalizedIdentifier, used: false },
+            where: { identifier: normalizedIdentifier, used: false },
             data: { used: true },
           });
           return res.status(503).json({
             success: false,
-            message: 'Unable to send email OTP. Please check your email address or try again later.',
+            message: 'Unable to deliver verification email. Please check your email address or try again later.',
           });
         }
       } else {
         const smsResult = await sendMobileOtpSms(normalizedIdentifier, rawOtp);
-
-        // FAIL SECURELY: If SMS gateway failed, invalidate OTP and fail
         if (!smsResult.sent) {
           await prisma.otpCode.updateMany({
-            where: { email: normalizedIdentifier, used: false },
+            where: { identifier: normalizedIdentifier, used: false },
             data: { used: true },
           });
           return res.status(503).json({
             success: false,
             message: smsResult.error?.includes('FAST2SMS_API_KEY')
-              ? 'SMS Service is currently being configured. Please use Email OTP or contact support.'
-              : 'Unable to send SMS verification code. Please check your mobile number or try again later.',
+              ? 'SMS Service is currently being configured. Please use Email OTP or password login.'
+              : 'Unable to send SMS verification code. Please try again later.',
           });
         }
       }
 
-      // Safe production response — NEVER return OTP or otpHint
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         message: isEmail
           ? `Verification code sent to ${normalizedIdentifier}. Please check your inbox.`
@@ -295,8 +336,7 @@ export class AuthController {
     }
   }
 
-  // POST /api/auth/verify-otp
-  // Validates user-submitted OTP against secure hash in database
+  // ── 4. VERIFY EMAIL OTP: POST /api/auth/verify-otp ──────────────────────────
   static async verifyOtp(req: Request, res: Response, next: NextFunction) {
     try {
       const { email, mobile, identifier, otp } = req.body;
@@ -306,40 +346,25 @@ export class AuthController {
       if (!rawTarget || !rawOtp) {
         return res.status(400).json({
           success: false,
-          message: 'Both destination identifier and 6-digit OTP code are required.',
+          message: 'Both email/phone and 6-digit verification code are required.',
         });
       }
 
-      // Validate 6-digit numeric OTP
       if (!/^\d{6}$/.test(rawOtp)) {
         return res.status(400).json({
           success: false,
-          message: 'Please enter a valid 6-digit numerical verification code.',
+          message: 'Please enter a valid 6-digit verification code.',
         });
       }
 
       const isEmail = rawTarget.includes('@');
-      let normalizedIdentifier: string;
+      const normalizedIdentifier = isEmail ? rawTarget.toLowerCase() : normalizeIndianMobile(rawTarget) || rawTarget;
 
-      if (isEmail) {
-        normalizedIdentifier = rawTarget.toLowerCase();
-      } else {
-        const cleanPhone = normalizeIndianMobile(rawTarget);
-        if (!cleanPhone) {
-          return res.status(400).json({
-            success: false,
-            message: 'Invalid mobile number format.',
-          });
-        }
-        normalizedIdentifier = cleanPhone;
-      }
-
-      // Find active, unexpired, unused OTP record
+      // Find active record
       const record = await prisma.otpCode.findFirst({
         where: {
-          email: normalizedIdentifier,
+          identifier: normalizedIdentifier,
           used: false,
-          expiresAt: { gt: new Date() },
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -351,54 +376,289 @@ export class AuthController {
         });
       }
 
-      // Validate secure hash comparison
+      // Check max attempts (5)
+      if (record.attempts >= 5) {
+        await prisma.otpCode.update({ where: { id: record.id }, data: { used: true } });
+        return res.status(429).json({
+          success: false,
+          message: 'Too many incorrect attempts. Please request a new verification code.',
+        });
+      }
+
+      // Check expiration (5 minutes)
+      if (new Date() > record.expiresAt) {
+        await prisma.otpCode.update({ where: { id: record.id }, data: { used: true } });
+        return res.status(401).json({
+          success: false,
+          message: 'Your verification code has expired. Please request a new code.',
+        });
+      }
+
+      // Verify cryptographic hash
       const computedHash = hashOtp(normalizedIdentifier, rawOtp);
       const isMatch = record.otp === computedHash || record.otp === rawOtp;
 
       if (!isMatch) {
+        await prisma.otpCode.update({
+          where: { id: record.id },
+          data: { attempts: record.attempts + 1 },
+        });
         return res.status(401).json({
           success: false,
           message: 'Incorrect verification code. Please check and try again.',
         });
       }
 
-      // One-time consumption: Mark OTP as used immediately so it can never be reused
+      // One-time consumption: mark OTP as used immediately
       await prisma.otpCode.update({
         where: { id: record.id },
         data: { used: true },
       });
 
+      // Find or create user
       const userEmail = isEmail ? normalizedIdentifier : `${normalizedIdentifier}@goldenbowl.in`;
+      let user = await UserRepository.findByIdentifier(normalizedIdentifier);
 
-      // Find or register new user
-      let user = await UserRepository.findByEmail(userEmail);
       if (!user) {
         user = await UserRepository.createUser({
           email: userEmail,
           name: isEmail ? normalizedIdentifier.split('@')[0] : `Customer ${normalizedIdentifier.slice(-4)}`,
           role: 'CUSTOMER',
           mobile: isEmail ? undefined : normalizedIdentifier,
+          provider: isEmail ? 'email' : 'mobile',
         });
       }
 
-      res.status(200).json({
+      const token = generateToken(user.id, user.role);
+
+      return res.status(200).json({
         success: true,
         message: 'Verification successful. Welcome to Golden Food Bowl!',
-        data: {
-          user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile, role: user.role },
-          token: `token-${Date.now()}-${user.id}`,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          mobile: user.mobile,
+          role: user.role,
         },
+        token,
       });
     } catch (error) {
       next(error);
     }
   }
 
+  // ── 5. MOBILE OTP: POST /api/auth/send-mobile-otp ───────────────────────────
+  static async sendMobileOtp(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { mobile } = req.body;
+      if (!mobile) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid 10-digit mobile number.',
+        });
+      }
+
+      const cleanPhone = normalizeIndianMobile(mobile.toString().trim());
+      if (!cleanPhone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).',
+        });
+      }
+
+      // Rate Limiting: 60-second cooldown
+      const now = Date.now();
+      const recentOtp = await prisma.otpCode.findFirst({
+        where: {
+          identifier: cleanPhone,
+          createdAt: { gt: new Date(now - 60 * 1000) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (recentOtp) {
+        return res.status(429).json({
+          success: false,
+          message: 'Please wait 60 seconds before requesting another SMS verification code.',
+        });
+      }
+
+      // Frequency limit
+      const count15m = await prisma.otpCode.count({
+        where: {
+          identifier: cleanPhone,
+          createdAt: { gt: new Date(now - 15 * 60 * 1000) },
+        },
+      });
+
+      if (count15m >= 5) {
+        return res.status(429).json({
+          success: false,
+          message: 'Too many SMS requests. Please try again in 15 minutes.',
+        });
+      }
+
+      const rawOtp = String(crypto.randomInt(100000, 1000000));
+      const hashedOtp = hashOtp(cleanPhone, rawOtp);
+      const expiresAt = new Date(now + 5 * 60 * 1000);
+
+      // Invalidate existing unused OTPs
+      await prisma.otpCode.updateMany({
+        where: { identifier: cleanPhone, used: false },
+        data: { used: true },
+      });
+
+      // Save hashed OTP
+      await prisma.otpCode.create({
+        data: {
+          identifier: cleanPhone,
+          identifierType: 'MOBILE',
+          otp: hashedOtp,
+          expiresAt,
+          attempts: 0,
+        },
+      });
+
+      // Send SMS
+      const smsResult = await sendMobileOtpSms(cleanPhone, rawOtp);
+
+      if (!smsResult.sent) {
+        await prisma.otpCode.updateMany({
+          where: { identifier: cleanPhone, used: false },
+          data: { used: true },
+        });
+        return res.status(503).json({
+          success: false,
+          message: smsResult.error?.includes('FAST2SMS_API_KEY')
+            ? 'SMS Service is currently being configured. Please use Email OTP or password login.'
+            : 'Unable to send SMS verification code. Please check your mobile number or try again later.',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Verification code sent via SMS to +91 ${cleanPhone}.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ── 6. VERIFY MOBILE OTP: POST /api/auth/verify-mobile-otp ──────────────────
+  static async verifyMobileOtp(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { mobile, otp } = req.body;
+      if (!mobile || !otp) {
+        return res.status(400).json({
+          success: false,
+          message: 'Both mobile number and 6-digit verification code are required.',
+        });
+      }
+
+      const cleanPhone = normalizeIndianMobile(mobile.toString().trim());
+      if (!cleanPhone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid mobile number format.',
+        });
+      }
+
+      const rawOtp = otp.toString().trim();
+      if (!/^\d{6}$/.test(rawOtp)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enter a valid 6-digit numerical verification code.',
+        });
+      }
+
+      // Find record
+      const record = await prisma.otpCode.findFirst({
+        where: {
+          identifier: cleanPhone,
+          used: false,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!record) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid or expired verification code. Please request a new code.',
+        });
+      }
+
+      if (record.attempts >= 5) {
+        await prisma.otpCode.update({ where: { id: record.id }, data: { used: true } });
+        return res.status(429).json({
+          success: false,
+          message: 'Too many incorrect attempts. Please request a new verification code.',
+        });
+      }
+
+      if (new Date() > record.expiresAt) {
+        await prisma.otpCode.update({ where: { id: record.id }, data: { used: true } });
+        return res.status(401).json({
+          success: false,
+          message: 'Your verification code has expired. Please request a new code.',
+        });
+      }
+
+      const computedHash = hashOtp(cleanPhone, rawOtp);
+      const isMatch = record.otp === computedHash || record.otp === rawOtp;
+
+      if (!isMatch) {
+        await prisma.otpCode.update({
+          where: { id: record.id },
+          data: { attempts: record.attempts + 1 },
+        });
+        return res.status(401).json({
+          success: false,
+          message: 'Incorrect verification code. Please check and try again.',
+        });
+      }
+
+      await prisma.otpCode.update({
+        where: { id: record.id },
+        data: { used: true },
+      });
+
+      let user = await UserRepository.findByMobile(cleanPhone);
+      if (!user) {
+        user = await UserRepository.createUser({
+          email: `${cleanPhone}@goldenbowl.in`,
+          mobile: cleanPhone,
+          name: `Customer ${cleanPhone.slice(-4)}`,
+          role: 'CUSTOMER',
+          provider: 'mobile',
+        });
+      }
+
+      const token = generateToken(user.id, user.role);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Verification successful. Welcome to Golden Food Bowl!',
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          mobile: user.mobile,
+          role: user.role,
+        },
+        token,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ── 7. SESSION MANAGEMENT ───────────────────────────────────────────────────
   static async me(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       res.status(200).json({
         success: true,
-        data: req.user,
+        user: req.user,
       });
     } catch (error) {
       next(error);

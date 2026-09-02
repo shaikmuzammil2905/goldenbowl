@@ -1,5 +1,5 @@
 // ─── Golden Food Bowl — Prisma Schema ───────────────────────────────────────
-// LOCAL DEV: SQLite    |    PRODUCTION: Switch provider to "postgresql"
+// LOCAL DEV: SQLite    |    PRODUCTION: PostgreSQL
 // Original PostgreSQL URL (for production deployment):
 //   postgresql://postgres:GoldenBowl2026!@goldenbowl-db.c56kmw20ae09.eu-north-1.rds.amazonaws.com:5432/goldenbowl?schema=public
 
@@ -12,24 +12,15 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// ─── Enums are not supported in SQLite, so we use String fields instead ──────
-// Role: ADMIN | SUPPORT | DELIVERY | CUSTOMER
-// OrderStatus: CONFIRMED | PREPARING | READY_FOR_PICKUP | ASSIGNED | PICKED_UP | OUT_FOR_DELIVERY | DELIVERED | CANCELLED
-// VerificationStatus: PENDING | VERIFIED | REJECTED
-// FeeStatus: PENDING | PAID
-// IssueStatus: OPEN | IN_PROGRESS | RESOLVED
-// IssuePriority: Low | Normal | High
-// PaymentStatus: PENDING | SUCCESSFUL | FAILED | REFUNDED
-
 model User {
   id               String            @id @default(uuid())
   cognitoSub       String?           @unique
   email            String            @unique
-  mobile           String?
+  mobile           String?           @unique
   name             String
   password         String?
   role             String            @default("CUSTOMER")
-  provider         String            @default("mobile")
+  provider         String            @default("email")
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   orders           Order[]           @relation("CustomerOrders")
@@ -211,13 +202,18 @@ model AuditLog {
 }
 
 model OtpCode {
-  id        String   @id @default(uuid())
-  email     String
-  otp       String
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid())
+  identifier     String   // Email or Phone number
+  identifierType String   @default("EMAIL") // EMAIL or MOBILE
+  email          String?  // Legacy compatibility
+  otp            String   // Cryptographic SHA-256 hash of the OTP
+  expiresAt      DateTime
+  attempts       Int      @default(0) // Max 5 verification attempts allowed
+  used           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
+  @@index([identifier])
   @@index([email])
   @@map("otp_codes")
 }

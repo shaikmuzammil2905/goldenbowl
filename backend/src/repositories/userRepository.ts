@@ -6,19 +6,57 @@ export class UserRepository {
   }
 
   static async findByEmail(email: string) {
-    return prisma.user.findUnique({ where: { email } });
+    return prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
   }
 
   static async findByMobile(mobile: string) {
-    return prisma.user.findFirst({ where: { mobile } });
+    return prisma.user.findFirst({ where: { mobile: mobile.trim() } });
+  }
+
+  static async findByIdentifier(identifier: string) {
+    const clean = identifier.trim();
+    if (clean.includes('@')) {
+      return prisma.user.findUnique({ where: { email: clean.toLowerCase() } });
+    }
+    // Search mobile
+    const digits = clean.replace(/\D/g, '');
+    const mobile10 = digits.length >= 10 ? digits.slice(-10) : digits;
+    return prisma.user.findFirst({
+      where: {
+        OR: [
+          { mobile: clean },
+          { mobile: mobile10 },
+          { mobile: `+91${mobile10}` },
+          { email: `${mobile10}@goldenbowl.in` },
+        ],
+      },
+    });
   }
 
   static async findByCognitoSub(cognitoSub: string) {
     return prisma.user.findUnique({ where: { cognitoSub } });
   }
 
-  static async createUser(data: { email: string; name: string; role?: string; mobile?: string; password?: string; cognitoSub?: string }) {
-    return prisma.user.create({ data });
+  static async createUser(data: {
+    email: string;
+    name: string;
+    role?: string;
+    mobile?: string;
+    password?: string;
+    provider?: string;
+    cognitoSub?: string;
+  }) {
+    return prisma.user.create({
+      data: {
+        email: data.email.toLowerCase().trim(),
+        name: data.name.trim(),
+        role: data.role || 'CUSTOMER',
+        mobile: data.mobile?.trim() || null,
+        password: data.password || null,
+        provider: data.provider || 'email',
+        cognitoSub: data.cognitoSub || null,
+      },
+    });
   }
 
   static async updatePassword(userId: string, password: string) {
