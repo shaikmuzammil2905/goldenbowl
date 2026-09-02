@@ -32,6 +32,13 @@ export const authApi = {
     });
   },
 
+  async register({ name, email, mobile, password }) {
+    return apiClient('/auth/register', {
+      method: 'POST',
+      body: { name, email, mobile, password },
+    });
+  },
+
   async logout(role = 'customer') {
     return apiClient('/auth/logout', {
       method: 'POST',
@@ -93,4 +100,3 @@ export const authApi = {
     });
   },
 };
-

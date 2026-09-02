@@ -1,6 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import { NotFoundError } from '../utils/errors.js';
-import { IssueStatus, IssuePriority } from '@prisma/client';
+
 
 export class SupportService {
   static async getIssues() {
@@ -15,7 +15,7 @@ export class SupportService {
     customerId?: string;
     customerName?: string;
     subject: string;
-    priority?: IssuePriority;
+    priority?: string;
   }) {
     const issueId = `TKT-${Math.floor(900 + Math.random() * 100)}`;
     return prisma.supportIssue.create({
@@ -31,7 +31,7 @@ export class SupportService {
     });
   }
 
-  static async updateIssueStatus(id: string, status: IssueStatus) {
+  static async updateIssueStatus(id: string, status: string) {
     const issue = await prisma.supportIssue.findUnique({ where: { id } });
     if (!issue) throw new NotFoundError(`Ticket ${id} not found`);
 

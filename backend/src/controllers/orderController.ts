@@ -1,14 +1,14 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types/index.js';
 import { OrderService } from '../services/orderService.js';
-import { OrderStatus } from '@prisma/client';
+
 
 export class OrderController {
   static async getOrders(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { status, customer } = req.query;
       const orders = await OrderService.getOrders({
-        status: status as OrderStatus,
+        status: status as string,
         customerId: customer as string,
       });
       res.status(200).json({ success: true, data: orders });

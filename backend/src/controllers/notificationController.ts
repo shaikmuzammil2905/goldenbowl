@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/prisma.js';
-import { Role } from '@prisma/client';
+
 
 export class NotificationController {
   static async getNotifications(req: Request, res: Response, next: NextFunction) {
     try {
       const { role } = req.query;
       const notifications = await prisma.notification.findMany({
-        where: role ? { role: (role as string).toUpperCase() as Role } : undefined,
+        where: role ? { role: (role as string).toUpperCase() } : undefined,
         orderBy: { createdAt: 'desc' },
       });
       res.status(200).json({ success: true, data: notifications });

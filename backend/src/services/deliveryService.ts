@@ -1,6 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import { NotFoundError } from '../utils/errors.js';
-import { VerificationStatus, FeeStatus } from '@prisma/client';
+
 
 export class DeliveryService {
   static async getPartners() {
@@ -39,7 +39,7 @@ export class DeliveryService {
     return partner;
   }
 
-  static async updateVerificationStatus(id: string, verificationStatus: VerificationStatus, feeStatus: FeeStatus = 'PAID') {
+  static async updateVerificationStatus(id: string, verificationStatus: string, feeStatus: string = 'PAID') {
     const partner = await prisma.deliveryPartner.findUnique({ where: { id } });
     if (!partner) throw new NotFoundError(`Delivery partner ${id} not found`);
 

@@ -5,8 +5,11 @@ import { validateSchema, loginSchema } from '../validators/index.js';
 
 const router = Router();
 
-// Legacy identifier-based login (mobile/email combined)
-router.post('/login', validateSchema(loginSchema), AuthController.login);
+// Password-based login (email/phone + password)
+router.post('/login', AuthController.login);
+
+// User registration (name + email/phone + password)
+router.post('/register', AuthController.register);
 
 // Email OTP login — 2-step flow
 router.post('/send-otp', AuthController.sendOtp);     // Step 1: generate & email OTP

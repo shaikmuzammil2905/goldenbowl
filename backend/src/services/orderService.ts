@@ -1,11 +1,11 @@
 import { OrderRepository } from '../repositories/orderRepository.js';
 import { ProductRepository } from '../repositories/productRepository.js';
 import { NotFoundError, BadRequestError } from '../utils/errors.js';
-import { OrderStatus } from '@prisma/client';
+
 import { prisma } from '../config/prisma.js';
 
 export class OrderService {
-  static async getOrders(params: { status?: OrderStatus; customerId?: string }) {
+  static async getOrders(params: { status?: string; customerId?: string }) {
     return OrderRepository.findAll(params);
   }
 
@@ -65,7 +65,7 @@ export class OrderService {
     return order;
   }
 
-  static async updateOrderStatus(id: string, status: OrderStatus) {
+  static async updateOrderStatus(id: string, status: string) {
     const order = await this.getOrderById(id);
     const updated = await OrderRepository.updateStatus(id, status);
 

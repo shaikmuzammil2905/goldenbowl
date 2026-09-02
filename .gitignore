@@ -28,5 +28,8 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Prisma generated (regenerated on build)
-# Keep schema but ignore generated client if desired
+# Prisma & SQLite
+*.db
+*.db-journal
+dev.db
+prisma/dev.db

@@ -1,8 +1,7 @@
 import { prisma } from '../config/prisma.js';
-import { OrderStatus } from '@prisma/client';
 
 export class OrderRepository {
-  static async findAll(params: { status?: OrderStatus; customerId?: string }) {
+  static async findAll(params: { status?: string; customerId?: string }) {
     return prisma.order.findMany({
       where: {
         status: params.status,
@@ -57,7 +56,7 @@ export class OrderRepository {
     });
   }
 
-  static async updateStatus(id: string, status: OrderStatus) {
+  static async updateStatus(id: string, status: string) {
     return prisma.order.update({
       where: { id },
       data: { status },

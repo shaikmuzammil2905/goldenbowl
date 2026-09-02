@@ -12,27 +12,146 @@ function hashOtp(identifier: string, rawOtp: string): string {
   return crypto.createHmac('sha256', secret).update(`${identifier}:${rawOtp}`).digest('hex');
 }
 
+// Simple password hashing (SHA-256 with salt) for development
+function hashPassword(password: string): string {
+  const salt = process.env.PASSWORD_SALT || 'goldenbowl_password_salt_2026';
+  return crypto.createHash('sha256').update(`${salt}:${password}`).digest('hex');
+}
+
 export class AuthController {
+  // POST /api/auth/login — Email/Phone + Password login
   static async login(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { identifier, role = 'CUSTOMER' } = req.body;
-      const email = identifier.includes('@') ? identifier : `${identifier}@example.com`;
+      const { identifier, password, role = 'CUSTOMER' } = req.body;
 
-      let user = await UserRepository.findByEmail(email);
+      if (!identifier || !password) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email/phone and password are required.',
+        });
+      }
+
+      const isEmail = identifier.includes('@');
+      let user;
+
+      if (isEmail) {
+        user = await UserRepository.findByEmail(identifier.toLowerCase());
+      } else {
+        // Try finding by mobile number
+        const cleanPhone = normalizeIndianMobile(identifier);
+        if (cleanPhone) {
+          user = await UserRepository.findByMobile(cleanPhone);
+        }
+        if (!user) {
+          // Fallback: try as email
+          user = await UserRepository.findByEmail(`${identifier}@goldenbowl.in`);
+        }
+      }
+
       if (!user) {
-        user = await UserRepository.createUser({
-          email,
-          name: email.split('@')[0],
-          role,
-          mobile: identifier.includes('@') ? undefined : identifier,
+        return res.status(401).json({
+          success: false,
+          message: 'No account found with this email/phone. Please sign up first.',
+        });
+      }
+
+      // Check password
+      if (!user.password) {
+        return res.status(401).json({
+          success: false,
+          message: 'No password set for this account. Please use OTP login or set a password.',
+        });
+      }
+
+      const hashedInput = hashPassword(password);
+      if (hashedInput !== user.password) {
+        return res.status(401).json({
+          success: false,
+          message: 'Incorrect password. Please try again or use OTP login.',
         });
       }
 
       res.status(200).json({
         success: true,
-        message: 'Authentication successful',
+        message: 'Login successful! Welcome back.',
         data: {
-          user,
+          user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile, role: user.role },
+          token: `token-${Date.now()}-${user.id}`,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // POST /api/auth/register — Sign up with email/phone + password
+  static async register(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { name, email, mobile, password } = req.body;
+
+      if (!name || !password) {
+        return res.status(400).json({
+          success: false,
+          message: 'Name and password are required.',
+        });
+      }
+
+      if (!email && !mobile) {
+        return res.status(400).json({
+          success: false,
+          message: 'Either email or mobile number is required.',
+        });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password must be at least 6 characters.',
+        });
+      }
+
+      const userEmail = email
+        ? email.toLowerCase().trim()
+        : `${normalizeIndianMobile(mobile) || mobile}@goldenbowl.in`;
+
+      // Check if user already exists
+      const existing = await UserRepository.findByEmail(userEmail);
+      if (existing) {
+        // If user exists but has no password, set it
+        if (!existing.password) {
+          const hashed = hashPassword(password);
+          await UserRepository.updatePassword(existing.id, hashed);
+          return res.status(200).json({
+            success: true,
+            message: 'Password set successfully! You can now login.',
+            data: {
+              user: { id: existing.id, name: existing.name, email: existing.email, mobile: existing.mobile, role: existing.role },
+              token: `token-${Date.now()}-${existing.id}`,
+            },
+          });
+        }
+        return res.status(409).json({
+          success: false,
+          message: 'An account with this email/phone already exists. Please sign in.',
+        });
+      }
+
+      const hashedPassword = hashPassword(password);
+      const cleanMobile = mobile ? normalizeIndianMobile(mobile) : undefined;
+
+      const user = await UserRepository.createUser({
+        email: userEmail,
+        name: name.trim(),
+        mobile: cleanMobile || mobile,
+        password: hashedPassword,
+        role: 'CUSTOMER',
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Account created successfully! Welcome to Golden Food Bowl.',
+        data: {
+          user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile, role: user.role },
           token: `token-${Date.now()}-${user.id}`,
         },
       });
@@ -266,7 +385,7 @@ export class AuthController {
         success: true,
         message: 'Verification successful. Welcome to Golden Food Bowl!',
         data: {
-          user,
+          user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile, role: user.role },
           token: `token-${Date.now()}-${user.id}`,
         },
       });

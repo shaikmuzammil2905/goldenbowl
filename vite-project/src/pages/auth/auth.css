@@ -240,3 +240,17 @@ td strong {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   PASSWORD FIELD — Show/Hide Toggle (Reference Design)
+   ═══════════════════════════════════════════════════════════════ */
+.csi-password-field{display:flex;align-items:center;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#ffffff;transition:border-color .15s ease}
+.csi-password-field:focus-within{border-color:#ca8a04;box-shadow:0 0 0 3px rgba(202,138,4,.10)}
+.csi-password-input{flex:1;height:44px;border:0;outline:0;padding:0 14px;font-size:12.5px;color:#1c1917;background:transparent;font-weight:500;box-sizing:border-box}
+.csi-password-input::placeholder{color:#c0b8ae}
+.csi-pw-toggle{flex-shrink:0;width:44px;height:44px;border:0;background:transparent;color:#94a3b8;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s ease}
+.csi-pw-toggle:hover{color:#ca8a04}
+
+/* Spinner animation */
+@keyframes spin{to{transform:rotate(360deg)}}
+.animate-spin{animation:spin 1s linear infinite}

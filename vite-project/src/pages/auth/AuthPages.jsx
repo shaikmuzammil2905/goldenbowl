@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Phone, UserRound, ShieldCheck, Car, FileText, Loader2 } from 'lucide-react';
+import { Mail, Phone, UserRound, ShieldCheck, Car, FileText, Loader2, Eye, EyeOff, Lock } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { registerCustomer, registerDeliveryPartner } from '../../services/prototypeStore';
 import { usePrototypeContext } from '../../context/PrototypeContext';
@@ -60,6 +60,16 @@ const TextField = ({ icon: Icon, label, ...props }) => (
   </label>
 );
 
+// ─── Google Icon SVG ──────────────────────────────────────────────────────────
+const GoogleIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 48 48">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </svg>
+);
+
 // ─── Email OTP Section ────────────────────────────────────────────────────────
 function EmailOtpSection({ onLogin }) {
   const [email, setEmail] = useState('');
@@ -108,7 +118,7 @@ function EmailOtpSection({ onLogin }) {
         body: { email: email.trim(), otp: emailOtp.trim() },
       });
       if (data.success && data.data?.user) {
-        onLogin({ email: email.trim(), name: data.data.user.name });
+        onLogin({ email: email.trim(), name: data.data.user.name, token: data.data.token });
       } else {
         setError(data.message || 'Invalid verification code. Please try again.');
         setEmailOtp('');
@@ -211,163 +221,95 @@ function EmailOtpSection({ onLogin }) {
   );
 }
 
-// ─── Mobile OTP Section ───────────────────────────────────────────────────────
-function MobileOtpSection({ onLogin }) {
-  const [mobile, setMobile] = useState('');
-  const [mobileOtp, setMobileOtp] = useState('');
-  const [sent, setSent] = useState(false);
+// ─── Password Login Section ───────────────────────────────────────────────────
+function PasswordLoginSection({ onLogin }) {
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [cooldown, setCooldown] = useState(0);
 
-  const mobileOk = /^\d{10}$/.test(mobile);
-
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = setInterval(() => setCooldown((c) => c - 1), 1000);
-    return () => clearInterval(timer);
-  }, [cooldown]);
-
-  const handleSendMobileOtp = async (e) => {
-    if (e) e.preventDefault();
-    if (!mobileOk || cooldown > 0) return;
-    setError('');
-    setLoading(true);
-    try {
-      const data = await apiClient('/auth/send-otp', {
-        method: 'POST',
-        body: { mobile: mobile.trim() },
-      });
-      if (data.success) {
-        setSent(true);
-        setCooldown(60);
-      } else {
-        setError(data.message || 'Unable to send SMS verification code. Please check your number.');
-      }
-    } catch (err) {
-      setError(err.message || 'Unable to reach SMS server. Please try again.');
-    }
-    setLoading(false);
-  };
-
-  const handleVerifyMobileOtp = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (mobileOtp.replace(/\D/g, '').length !== 6) return;
+    if (!identifier.trim() || !password) return;
     setError('');
     setLoading(true);
     try {
-      const data = await apiClient('/auth/verify-otp', {
+      const data = await apiClient('/auth/login', {
         method: 'POST',
-        body: { mobile: mobile.trim(), otp: mobileOtp.trim() },
+        body: { identifier: identifier.trim(), password },
       });
       if (data.success && data.data?.user) {
-        onLogin({ mobile, name: data.data.user.name || `Customer ${mobile.slice(-4)}` });
+        onLogin({
+          email: data.data.user.email,
+          mobile: data.data.user.mobile,
+          name: data.data.user.name,
+          token: data.data.token,
+        });
       } else {
-        setError(data.message || 'Invalid or expired verification code. Please try again.');
-        setMobileOtp('');
+        setError(data.message || 'Login failed. Please check your credentials.');
       }
     } catch (err) {
-      setError(err.message || 'Verification request failed. Please check your connection.');
+      setError(err.message || 'Login failed. Please try again.');
     }
     setLoading(false);
   };
 
-  const handleOtpBoxChange = (e, i) => {
-    const v = e.target.value.replace(/\D/g, '');
-    const arr = (mobileOtp + '      ').slice(0, 6).split('');
-    arr[i] = v;
-    setMobileOtp(arr.join('').trimEnd().slice(0, 6));
-    if (v && e.target.nextSibling) e.target.nextSibling.focus();
-  };
-
-  if (!sent) {
-    return (
-      <form className="clean-form" onSubmit={handleSendMobileOtp}>
-        <label className="clean-field">
-          <span className="field-label"><Phone size={15} /> Mobile Number</span>
-          <div className="csi-mobile-field">
-            <span className="csi-prefix">🇮🇳 +91</span>
-            <input
-              className="csi-mobile-input"
-              value={mobile}
-              onChange={(e) => { setMobile(e.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }}
-              placeholder="Enter 10-digit mobile"
-              inputMode="numeric"
-              autoComplete="tel"
-              required
-            />
-          </div>
-        </label>
-        {error && (
-          <p style={{ color: '#dc2626', fontSize: 12, margin: '-4px 0 6px', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
-            ⚠️ {error}
-          </p>
-        )}
-        <button
-          type="submit"
-          className="auth-primary gold-btn"
-          disabled={!mobileOk || loading}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-        >
-          {loading ? <><Loader2 size={16} className="animate-spin" /> Sending SMS Code...</> : <>Send SMS Code →</>}
-        </button>
-        <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
-          A 6-digit SMS verification code will be sent to your phone
-        </p>
-      </form>
-    );
-  }
-
   return (
-    <form className="clean-form" onSubmit={handleVerifyMobileOtp}>
-      <p className="csi-otp-sent">
-        Verification code sent to <strong>+91 {mobile}</strong>
-        <br /><small style={{ color: '#94a3b8', fontWeight: 400 }}>Please check your SMS messages</small>
-      </p>
-      <div className="csi-otp-row">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
+    <form className="clean-form" onSubmit={handleLogin}>
+      <label className="clean-field">
+        <span className="field-label"><Mail size={15} /> Email or Phone</span>
+        <input
+          value={identifier}
+          onChange={(e) => { setIdentifier(e.target.value); setError(''); }}
+          placeholder="Email or 10-digit mobile"
+          required
+          autoComplete="username"
+        />
+      </label>
+
+      <label className="clean-field">
+        <span className="field-label"><Lock size={15} /> Password</span>
+        <div className="csi-password-field">
           <input
-            key={i}
-            className="csi-otp-box"
-            maxLength={1}
-            value={mobileOtp[i] || ''}
-            inputMode="numeric"
-            autoFocus={i === 0}
-            onChange={(e) => handleOtpBoxChange(e, i)}
+            className="csi-password-input"
+            type={showPw ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(''); }}
+            placeholder="Enter your password"
+            required
+            autoComplete="current-password"
           />
-        ))}
+          <button
+            type="button"
+            className="csi-pw-toggle"
+            onClick={() => setShowPw(!showPw)}
+            tabIndex={-1}
+          >
+            {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+      </label>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '-4px 0 2px' }}>
+        <Link to="/customer/forgot-password" className="csi-forgot">Forgot password?</Link>
+        <span style={{ fontSize: 10.5, color: '#78716c' }}>Having trouble logging in?</span>
       </div>
+
       {error && (
-        <p style={{ color: '#dc2626', fontSize: 12, margin: '-4px 0 6px', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
+        <p style={{ color: '#dc2626', fontSize: 12, margin: '0 0 4px', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
           ⚠️ {error}
         </p>
       )}
+
       <button
         type="submit"
         className="auth-primary gold-btn"
-        disabled={mobileOtp.replace(/\s/g, '').length !== 6 || loading}
+        disabled={!identifier.trim() || !password || loading}
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
       >
-        {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : <>Verify &amp; Sign In ✓</>}
+        {loading ? <><Loader2 size={16} className="animate-spin" /> Logging in...</> : 'Login'}
       </button>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-        <button
-          type="button"
-          className="csi-back-link"
-          onClick={() => { setSent(false); setMobileOtp(''); setError(''); }}
-        >
-          ← Change number
-        </button>
-        <button
-          type="button"
-          className="csi-back-link"
-          disabled={loading || cooldown > 0}
-          onClick={handleSendMobileOtp}
-          style={{ color: cooldown > 0 ? '#94a3b8' : '#d97706' }}
-        >
-          {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend SMS Code'}
-        </button>
-      </div>
     </form>
   );
 }
@@ -378,14 +320,44 @@ export function CustomerSignUpPage() {
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
-  const ok = name.trim() && /^\d{10}$/.test(mobile);
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const ok = name.trim() && password.length >= 6 && (email || /^\d{10}$/.test(mobile));
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     if (!ok) return;
-    registerCustomer({ name: name.trim(), mobile, email });
-    authStorage.setCustomerAuth({ mobile, email, name: name.trim(), role: 'customer' });
-    n('/customer/verify-otp');
+    setError('');
+    setLoading(true);
+    try {
+      const data = await apiClient('/auth/register', {
+        method: 'POST',
+        body: {
+          name: name.trim(),
+          email: email.trim() || undefined,
+          mobile: mobile.trim() || undefined,
+          password,
+        },
+      });
+      if (data.success && data.data?.user) {
+        registerCustomer({ name: name.trim(), mobile, email });
+        authStorage.setCustomerAuth({
+          mobile,
+          email: data.data.user.email,
+          name: data.data.user.name,
+          role: 'customer',
+          token: data.data.token,
+        });
+        n('/customer/home');
+      } else {
+        setError(data.message || 'Registration failed. Please try again.');
+      }
+    } catch (err) {
+      setError(err.message || 'Registration failed. Please try again.');
+    }
+    setLoading(false);
   };
 
   return (
@@ -393,19 +365,58 @@ export function CustomerSignUpPage() {
       <p className="auth-desc">Enter your details to create your Golden Food Bowl account.</p>
       <form onSubmit={submit} className="clean-form">
         <TextField icon={UserRound} label="Full Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Priya Sharma" required />
-        <TextField icon={Phone} label="Mobile Number" value={mobile} onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit mobile number" inputMode="numeric" required />
-        <TextField icon={Mail} label={<>Email <small>(optional)</small></>} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" type="email" />
-        <button type="submit" className="auth-primary gold-btn" disabled={!ok}>Create Account</button>
+        <TextField icon={Phone} label="Mobile Number" value={mobile} onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit mobile number" inputMode="numeric" />
+        <TextField icon={Mail} label={<>Email <small>(recommended)</small></>} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" type="email" />
+
+        <label className="clean-field">
+          <span className="field-label"><Lock size={15} /> Password</span>
+          <div className="csi-password-field">
+            <input
+              className="csi-password-input"
+              type={showPw ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Min. 6 characters"
+              required
+              autoComplete="new-password"
+            />
+            <button type="button" className="csi-pw-toggle" onClick={() => setShowPw(!showPw)} tabIndex={-1}>
+              {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </label>
+
+        {error && (
+          <p style={{ color: '#dc2626', fontSize: 12, padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
+            ⚠️ {error}
+          </p>
+        )}
+        <button type="submit" className="auth-primary gold-btn" disabled={!ok || loading} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {loading ? <><Loader2 size={16} className="animate-spin" /> Creating Account...</> : 'Create Account'}
+        </button>
       </form>
+
+      {/* Divider */}
+      <div className="auth-divider">OR</div>
+
+      {/* Google Sign-In */}
+      <button type="button" className="auth-social" onClick={() => {
+        registerCustomer({ name: 'Google User', mobile: '', email: 'user@gmail.com' });
+        authStorage.setCustomerAuth({ email: 'user@gmail.com', name: 'Google User', role: 'customer' });
+        n('/customer/home');
+      }}>
+        <GoogleIcon /> Sign up with Google
+      </button>
+
       <p className="auth-switch-text">Already have an account? <Link to="/customer/signin">Sign In</Link></p>
     </Frame>
   );
 }
 
-// ─── Customer Sign In Page ────────────────────────────────────────────────────
+// ─── Customer Sign In Page (Redesigned — Reference Layout) ────────────────────
 export function CustomerSignInPage() {
   const n = useNavigate();
-  const [mode, setMode] = useState('mobile');
+  const [mode, setMode] = useState('password'); // 'password' or 'otp'
 
   const handleSuccessfulLogin = (userData) => {
     authStorage.setCustomerAuth({ ...userData, role: 'customer' });
@@ -413,34 +424,70 @@ export function CustomerSignInPage() {
   };
 
   return (
-    <Frame eyebrow="SIGN IN" title="Welcome Back">
-      <p className="auth-desc">Sign in to order your favourite food bowls.</p>
+    <div className="mobile-prototype-frame">
+      <div className="mobile-app-shell">
+        <MobileStatusBar />
+        <main className="csi-screen">
+          {/* ── Blue/Gold Hero Header ─── */}
+          <div className="csi-hero">
+            <div className="csi-hero-glow" />
+            <div className="csi-hero-content">
+              <img src={LOGO} alt="Golden Food Bowl" className="auth-large-logo" style={{ width: 68, height: 68 }} />
+              <strong style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: 1 }}>GOLDEN FOOD BOWL</strong>
+              <small style={{ fontSize: 9.5, fontWeight: 700, color: '#f5c518', letterSpacing: 1, textTransform: 'uppercase' }}>Fresh • Tasty • Fast</small>
+            </div>
+          </div>
 
-      {/* Tabs */}
-      <div className="csi-tabs">
-        <button
-          type="button"
-          className={`csi-tab${mode === 'mobile' ? ' csi-tab-active' : ''}`}
-          onClick={() => setMode('mobile')}
-        >
-          📱 Mobile OTP
-        </button>
-        <button
-          type="button"
-          className={`csi-tab${mode === 'email' ? ' csi-tab-active' : ''}`}
-          onClick={() => setMode('email')}
-        >
-          ✉️ Email OTP
-        </button>
+          {/* ── White Sheet ─── */}
+          <div className="csi-sheet">
+            <h1 className="auth-title-clean" style={{ marginBottom: 0 }}>Welcome back!</h1>
+            <p className="auth-desc" style={{ margin: '2px 0 4px' }}>Login to order your favourite food bowls</p>
+
+            {/* Mode Tabs */}
+            <div className="csi-tabs">
+              <button
+                type="button"
+                className={`csi-tab${mode === 'password' ? ' csi-tab-active' : ''}`}
+                onClick={() => setMode('password')}
+              >
+                🔐 Password
+              </button>
+              <button
+                type="button"
+                className={`csi-tab${mode === 'otp' ? ' csi-tab-active' : ''}`}
+                onClick={() => setMode('otp')}
+              >
+                ✉️ Email OTP
+              </button>
+            </div>
+
+            {/* Login Forms */}
+            {mode === 'password' && <PasswordLoginSection onLogin={handleSuccessfulLogin} />}
+            {mode === 'otp' && <EmailOtpSection onLogin={handleSuccessfulLogin} />}
+
+            {/* Sign Up Link */}
+            <p className="auth-switch-text" style={{ margin: '8px 0 4px' }}>
+              Need to create an account? <Link to="/customer/signup">Sign Up</Link>
+            </p>
+
+            {/* OR Divider */}
+            <div className="auth-divider">OR</div>
+
+            {/* Google Sign-In */}
+            <button
+              type="button"
+              className="auth-social"
+              onClick={() => {
+                authStorage.setCustomerAuth({ email: 'user@gmail.com', name: 'Google User', role: 'customer' });
+                n('/customer/home');
+              }}
+            >
+              <GoogleIcon /> Log in using Google
+            </button>
+          </div>
+        </main>
       </div>
-
-      {mode === 'mobile' && <MobileOtpSection onLogin={handleSuccessfulLogin} />}
-      {mode === 'email' && <EmailOtpSection onLogin={handleSuccessfulLogin} />}
-
-      <p className="auth-switch-text" style={{ marginTop: 24 }}>
-        New to Bowl? <Link to="/customer/signup">Create an account</Link>
-      </p>
-    </Frame>
+    </div>
   );
 }
 
