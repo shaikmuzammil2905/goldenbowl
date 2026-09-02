@@ -9,6 +9,9 @@ import { env } from './config/env.js';
 
 const app: Express = express();
 
+// Trust proxy (required for Vercel, CloudFront, ALB, and reverse proxies)
+app.set('trust proxy', 1);
+
 // 1. Helmet Security Headers
 app.use(helmet());
 
