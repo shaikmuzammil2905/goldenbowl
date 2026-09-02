@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="https://res.cloudinary.com/dwmjz9csc/image/upload/v1787060691/Golden_bowl_-removebg-preview_yxaxp1.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- Permissions for payment gateways and device APIs -->
+    <meta http-equiv="Permissions-Policy" content="accelerometer=*, payment=*, gyroscope=*, magnetometer=*, microphone=*, camera=*, geolocation=*, usb=*" />
+    <!-- Content Security Policy to allow required scripts and assets -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data:; script-src 'self' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://api.*.com;" />
     <title>Golden Food Bowl</title>
   </head>
   <body>

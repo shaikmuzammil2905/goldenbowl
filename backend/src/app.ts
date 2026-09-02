@@ -12,8 +12,14 @@ const app: Express = express();
 // Trust proxy (required for Vercel, CloudFront, ALB, and reverse proxies)
 app.set('trust proxy', 1);
 
-// 1. Helmet Security Headers
-app.use(helmet());
+// 1. Helmet Security Headers (Configured for payment gateways and cross-origin resources)
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: false,
+  })
+);
 
 // 2. CORS Security Configuration
 app.use(
