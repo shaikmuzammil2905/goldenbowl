@@ -17,9 +17,19 @@ app.use(
   helmet({
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: { policy: 'unsafe-none' },
     contentSecurityPolicy: false,
   })
 );
+
+// Permissions-Policy header: grant sensor/payment APIs so Razorpay iframe can use them
+app.use((req: Request, res: Response, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'accelerometer=*, gyroscope=*, magnetometer=*, payment=*, camera=*, geolocation=*, microphone=*'
+  );
+  next();
+});
 
 // 2. CORS Security Configuration
 app.use(
