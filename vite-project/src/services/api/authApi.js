@@ -68,6 +68,14 @@ export const authApi = {
     });
   },
 
+  // ── Password Reset Request ────────────────────────────────────────
+  async requestPasswordReset({ identifier }) {
+    return apiClient('/auth/request-reset', {
+      method: 'POST',
+      body: { identifier },
+    });
+  },
+
   // ── Legacy Aliases ────────────────────────────────────────────────────────
   async sendOtp({ email, mobile }) {
     if (email) return this.sendEmailOtp({ email });

@@ -722,12 +722,14 @@ export function CustomerForgotPasswordPage() {
   const n = useNavigate();
   const [identifier, setIdentifier] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   return (
     <Frame eyebrow="ACCOUNT RECOVERY" title="Reset Password">
       <p className="auth-desc">Enter your registered email or phone to receive recovery instructions.</p>
       {!submitted ? (
-        <form onSubmit={(e) => { e.preventDefault(); setSubmitted(true); }} className="clean-form">
+        <form onSubmit={async (e) => { e.preventDefault(); setLoading(true); setError(''); try { await authApi.requestPasswordReset({ identifier }); setSubmitted(true); } catch (err) { console.error(err); setError('Failed to send reset link. Please try again.'); } finally { setLoading(false); } }} className="clean-form">
           <TextField
             icon={Mail}
             label="Email or Mobile Number"
@@ -736,9 +738,10 @@ export function CustomerForgotPasswordPage() {
             placeholder="Registered email or phone"
             required
           />
-          <button type="submit" className="auth-primary gold-btn" disabled={!identifier.trim()}>
-            Send Password Reset Link →
+          <button type="submit" className="auth-primary gold-btn" disabled={!identifier.trim() || loading}>
+            {loading ? <Loader2 size={16} className="animate-spin" /> : 'Send Password Reset Link →'}
           </button>
+          {error && <p style={{ color: '#b91c1c', marginTop: 8 }}>{error}</p>}
           <p className="auth-switch-text"><Link to="/customer/signin">Back to Sign In</Link></p>
         </form>
       ) : (
