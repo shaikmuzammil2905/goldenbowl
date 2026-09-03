@@ -1,8 +1,8 @@
 import { authStorage } from '../storage/authStorage';
 
-let API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+let API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/aws-api';
 if (typeof window !== 'undefined' && window.location.protocol === 'https:' && API_BASE_URL.startsWith('http://')) {
-  API_BASE_URL = '/api';
+  API_BASE_URL = '/aws-api';
 }
 // Strip trailing slash if any
 if (API_BASE_URL.endsWith('/')) {

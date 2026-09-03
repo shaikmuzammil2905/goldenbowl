@@ -69,9 +69,10 @@ export default defineConfig({
   plugins: [react(), localApiPlugin()],
   server: {
     proxy: {
-      '/api': {
+      '/aws-api': {
         target: process.env.VITE_BACKEND_URL || 'http://localhost:8080',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/aws-api/, '/api')
       },
     },
   },
