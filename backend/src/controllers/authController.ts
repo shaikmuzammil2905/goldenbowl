@@ -26,11 +26,14 @@ function hashPassword(password: string): string {
   return crypto.pbkdf2Sync(password, PASSWORD_SALT, 10000, 64, 'sha512').toString('hex');
 }
 
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
+
 /**
  * Generates an authentication token.
  */
 function generateToken(userId: string, role: string): string {
-  return `token-${Date.now()}-${userId}`;
+  return jwt.sign({ id: userId, role }, env.JWT_SECRET, { expiresIn: '7d' });
 }
 
 export class AuthController {

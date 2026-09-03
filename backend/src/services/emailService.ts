@@ -18,8 +18,8 @@ if (missingVars.length > 0) {
 // Single reusable Nodemailer transporter — connection is pooled by Nodemailer.
 const transporter = nodemailer.createTransport({
   host: env.SMTP_HOST,        // smtp.gmail.com
-  port: env.SMTP_PORT,        // 587 (STARTTLS)
-  secure: false,              // false = STARTTLS; true only for port 465
+  port: env.SMTP_PORT,        // 587 (STARTTLS) or 465 (SSL)
+  secure: env.SMTP_SECURE,    // false = STARTTLS; true only for port 465
   auth: {
     user: env.SMTP_USER,      // Gmail address (from SMTP_USER env var)
     pass: env.SMTP_PASS,      // 16-char Google App Password (from SMTP_PASS env var)

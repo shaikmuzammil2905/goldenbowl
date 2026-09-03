@@ -20,9 +20,13 @@ export const env = {
   // Nodemailer SMTP (Email OTP)
   SMTP_HOST: process.env.SMTP_HOST || 'smtp.gmail.com',
   SMTP_PORT: parseInt(process.env.SMTP_PORT || '587', 10),
+  SMTP_SECURE: process.env.SMTP_SECURE === 'true',
   SMTP_USER: process.env.SMTP_USER || '',
   SMTP_PASS: process.env.SMTP_PASS || '',
   SMTP_FROM: process.env.SMTP_FROM || 'Golden Food Bowl <noreply@goldenbowl.com>',
+
+  // Application Authentication Secret
+  JWT_SECRET: process.env.JWT_SECRET || 'goldenbowl-fallback-jwt-secret-do-not-use-in-prod',
 
   FRONTEND_URL: process.env.FRONTEND_URL || '*',
 };

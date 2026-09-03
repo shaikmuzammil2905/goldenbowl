@@ -20,31 +20,22 @@ if (env.COGNITO_USER_POOL_ID && env.COGNITO_CLIENT_ID) {
   }
 }
 
+import jwt from 'jsonwebtoken';
+
 export async function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   let authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    authHeader = 'Bearer token-admin-goldenbowl';
+    return res.status(401).json({ success: false, message: 'Authorization required' });
   }
 
   const token = authHeader.split(' ')[1];
 
-  // 1. Prototype / Development Token Check (Prioritize before JWT verify)
-  if (token.startsWith('token-') || token === 'token-admin-goldenbowl' || env.NODE_ENV === 'development') {
-    const roleHeader = ((req.headers['x-user-role'] as string)?.toUpperCase() as UserRole) || 'ADMIN';
-    const emailHeader = (req.headers['x-user-email'] as string) || 'admin@goldenbowl.com';
-
-    try {
-      let user = await prisma.user.findFirst({ where: { email: emailHeader } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            email: emailHeader,
-            name: 'Golden Admin',
-            role: roleHeader,
-          },
-        });
-      }
-
+  // 1. Application Native JWT Check
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET) as any;
+    const user = await prisma.user.findUnique({ where: { id: payload.id } });
+    
+    if (user) {
       req.user = {
         id: user.id,
         email: user.email,
@@ -52,15 +43,9 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
         role: user.role as UserRole,
       };
       return next();
-    } catch (err: any) {
-      req.user = {
-        id: 'admin-fallback',
-        email: emailHeader,
-        name: 'Admin User',
-        role: roleHeader,
-      };
-      return next();
     }
+  } catch (err) {
+    // If it's not a valid native JWT, we'll let it fall through to Cognito (if configured).
   }
 
   // 2. Production Cognito Token Verification
@@ -98,12 +83,5 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
     }
   }
 
-  // Default Fallback User
-  req.user = {
-    id: 'admin-fallback',
-    email: 'admin@goldenbowl.com',
-    name: 'Admin User',
-    role: 'ADMIN',
-  };
-  return next();
+  return res.status(401).json({ success: false, message: 'Invalid or expired token' });
 }
