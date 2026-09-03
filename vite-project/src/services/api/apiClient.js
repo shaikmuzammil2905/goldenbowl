@@ -57,7 +57,16 @@ export async function apiClient(endpoint, { method = 'GET', body = null, headers
       throw new Error(errorMessage);
     }
 
-    return await response.json();
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return await response.json();
+    } else {
+      const text = await response.text();
+      if (text.trim().startsWith('<')) {
+         throw new Error('API returned HTML instead of JSON. The route might be missing on the backend.');
+      }
+      return JSON.parse(text);
+    }
   } catch (error) {
     if (fallback) {
       return await Promise.resolve(fallback());
