@@ -1,26 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/vercel-api/auth/request-reset",
-      "destination": "/api/auth/request-reset"
-    },
-    {
-      "source": "/vercel-api/auth/send-otp",
-      "destination": "/api/auth/send-otp"
-    },
-    {
-      "source": "/vercel-api/auth/verify-otp",
-      "destination": "/api/auth/verify-otp"
-    },
-    {
-      "source": "/vercel-api/auth/send-mobile-otp",
-      "destination": "/api/auth/send-mobile-otp"
-    },
-    {
-      "source": "/vercel-api/auth/verify-mobile-otp",
-      "destination": "/api/auth/verify-mobile-otp"
-    },
-    {
       "source": "/api/:path*",
       "destination": "http://16.171.41.5:8080/api/:path*"
     },

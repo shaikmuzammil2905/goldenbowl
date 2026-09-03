@@ -40,7 +40,7 @@ export const authApi = {
 
   // ── Email OTP ─────────────────────────────────────────────────────────────
   async sendEmailOtp({ email }) {
-    const res = await fetch('/vercel-api/auth/send-otp', {
+    const res = await fetch('/api/auth/send-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
@@ -49,7 +49,7 @@ export const authApi = {
   },
 
   async verifyEmailOtp({ email, otp }) {
-    const res = await fetch('/vercel-api/auth/verify-otp', {
+    const res = await fetch('/api/auth/verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, otp })
@@ -59,7 +59,7 @@ export const authApi = {
 
   // ── Mobile OTP ────────────────────────────────────────────────────────────
   async sendMobileOtp({ mobile }) {
-    const res = await fetch('/vercel-api/auth/send-mobile-otp', {
+    const res = await fetch('/api/auth/send-mobile-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mobile })
@@ -68,7 +68,7 @@ export const authApi = {
   },
 
   async verifyMobileOtp({ mobile, otp }) {
-    const res = await fetch('/vercel-api/auth/verify-mobile-otp', {
+    const res = await fetch('/api/auth/verify-mobile-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mobile, otp })
@@ -78,7 +78,7 @@ export const authApi = {
 
   // ── Password Reset Request ────────────────────────────────────────
   async requestPasswordReset({ identifier }) {
-    const res = await fetch('/vercel-api/auth/request-reset', {
+    const res = await fetch('/api/auth/request-reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier })

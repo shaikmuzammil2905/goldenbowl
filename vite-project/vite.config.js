@@ -6,7 +6,11 @@ const localApiPlugin = () => ({
   name: 'local-api-plugin',
   configureServer(server) {
     server.middlewares.use(async (req, res, next) => {
-      if (req.url.startsWith('/vercel-api/auth/')) {
+      if (req.url.startsWith('/api/auth/send-otp') || 
+          req.url.startsWith('/api/auth/verify-otp') || 
+          req.url.startsWith('/api/auth/send-mobile-otp') || 
+          req.url.startsWith('/api/auth/verify-mobile-otp') || 
+          req.url.startsWith('/api/auth/request-reset')) {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', async () => {
@@ -14,7 +18,7 @@ const localApiPlugin = () => ({
             const data = body ? JSON.parse(body) : {};
             res.setHeader('Content-Type', 'application/json');
 
-            if (req.url === '/vercel-api/auth/send-otp' || req.url === '/vercel-api/auth/request-reset') {
+            if (req.url === '/api/auth/send-otp' || req.url === '/api/auth/request-reset') {
               const email = data.email || data.identifier;
               if (email && email.includes('@')) {
                 const transporter = nodemailer.createTransport({
@@ -34,11 +38,11 @@ const localApiPlugin = () => ({
               }
               res.end(JSON.stringify({ success: true, message: 'Sent successfully.' }));
             } 
-            else if (req.url === '/vercel-api/auth/send-mobile-otp') {
+            else if (req.url === '/api/auth/send-mobile-otp') {
               // Simulate SMS success (autofilled in frontend)
               res.end(JSON.stringify({ success: true, message: 'Mobile OTP sent.' }));
             }
-            else if (req.url === '/vercel-api/auth/verify-otp' || req.url === '/vercel-api/auth/verify-mobile-otp') {
+            else if (req.url === '/api/auth/verify-otp' || req.url === '/api/auth/verify-mobile-otp') {
               res.end(JSON.stringify({
                 success: true,
                 user: { id: 'usr_mock', name: 'User', email: data.email, mobile: data.mobile, role: 'customer' }
