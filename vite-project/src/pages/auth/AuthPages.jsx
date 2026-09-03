@@ -829,7 +829,7 @@ export function CustomerResetPasswordPage() {
 
     try {
       // Phase 2 implementation: Call backend to reset password
-      const res = await fetch('/aws-api/auth/reset-password', {
+      const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password })
