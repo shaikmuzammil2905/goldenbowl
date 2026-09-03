@@ -832,16 +832,13 @@ export class AuthController {
     }
   }
 
-  // ── GOOGLE OAUTH LOGIN: POST /api/auth/google-login ───────────────────────────
-  static async googleLogin(req: Request, res: Response, next: NextFunction) {
+  static async googleLogin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { token } = req.body;
       if (!token) {
         return res.status(400).json({ success: false, message: 'Google token is required.' });
       }
 
-      // The frontend uses implicit grant (@react-oauth/google useGoogleLogin), providing an access_token.
-      // We verify it using the Google tokeninfo endpoint.
       let payload: any;
       try {
         const response = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${token}`);

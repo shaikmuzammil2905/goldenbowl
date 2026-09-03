@@ -18,7 +18,7 @@ import { PrototypeProvider } from './context/PrototypeContext.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <GoogleOAuthProvider clientId="YOUR_GOOGLE_CLIENT_ID">
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID'}>
       <BrowserRouter>
         <AuthProvider>
           <PrototypeProvider>

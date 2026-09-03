@@ -27,6 +27,7 @@ export const env = {
 
   // Application Authentication Secret
   JWT_SECRET: process.env.JWT_SECRET || 'goldenbowl-fallback-jwt-secret-do-not-use-in-prod',
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
 
   FRONTEND_URL: process.env.FRONTEND_URL || '*',
 };
