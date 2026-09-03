@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
-  // Strip the /api/aws-api prefix from the Vercel request URL
-  // e.g. /api/aws-api/auth/login -> /auth/login
-  const urlPath = req.url.replace(/^\/api\/aws-api/, '');
+  // Extract anything after /aws-api or /api/aws-api to handle Vercel's req.url variations
+  const match = req.url.match(/(?:\/api\/aws-api|\/aws-api)(.*)/);
+  const urlPath = match ? match[1] : req.url;
   
   const targetUrl = `http://16.171.41.5:8080/api${urlPath}`;
 
