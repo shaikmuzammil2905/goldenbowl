@@ -555,19 +555,11 @@ export function CustomerSignInPage() {
               >
                 ✉️ Gmail OTP
               </button>
-              <button
-                type="button"
-                className={`csi-tab${mode === 'mobile-otp' ? ' csi-tab-active' : ''}`}
-                onClick={() => setMode('mobile-otp')}
-              >
-                📱 Mobile OTP
-              </button>
             </div>
 
             {/* Active Mode Component */}
             {mode === 'password' && <PasswordLoginSection onLogin={handleSuccessfulLogin} />}
             {mode === 'email-otp' && <EmailOtpSection onLogin={handleSuccessfulLogin} />}
-            {mode === 'mobile-otp' && <MobileOtpSection onLogin={handleSuccessfulLogin} />}
 
             {/* OR Divider */}
             <div className="auth-divider">OR</div>
