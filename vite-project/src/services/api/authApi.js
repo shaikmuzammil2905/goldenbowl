@@ -40,40 +40,50 @@ export const authApi = {
 
   // ── Email OTP ─────────────────────────────────────────────────────────────
   async sendEmailOtp({ email }) {
-    return apiClient('/auth/send-otp', {
+    const res = await fetch('/vercel-api/auth/send-otp', {
       method: 'POST',
-      body: { email },
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
     });
+    return res.json();
   },
 
   async verifyEmailOtp({ email, otp }) {
-    return apiClient('/auth/verify-otp', {
+    const res = await fetch('/vercel-api/auth/verify-otp', {
       method: 'POST',
-      body: { email, otp },
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp })
     });
+    return res.json();
   },
 
   // ── Mobile OTP ────────────────────────────────────────────────────────────
   async sendMobileOtp({ mobile }) {
-    return apiClient('/auth/send-mobile-otp', {
+    const res = await fetch('/vercel-api/auth/send-mobile-otp', {
       method: 'POST',
-      body: { mobile },
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mobile })
     });
+    return res.json();
   },
 
   async verifyMobileOtp({ mobile, otp }) {
-    return apiClient('/auth/verify-mobile-otp', {
+    const res = await fetch('/vercel-api/auth/verify-mobile-otp', {
       method: 'POST',
-      body: { mobile, otp },
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mobile, otp })
     });
+    return res.json();
   },
 
   // ── Password Reset Request ────────────────────────────────────────
   async requestPasswordReset({ identifier }) {
-    return apiClient('/auth/request-reset', {
+    const res = await fetch('/vercel-api/auth/request-reset', {
       method: 'POST',
-      body: { identifier },
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier })
     });
+    return res.json();
   },
 
   // ── Legacy Aliases ────────────────────────────────────────────────────────
