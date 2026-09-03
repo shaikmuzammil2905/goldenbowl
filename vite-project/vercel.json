@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/aws-api/:path*",
-      "destination": "http://16.171.41.5:8080/api/:path*"
+      "source": "/aws-api/(.*)",
+      "destination": "http://16.171.41.5:8080/api/$1"
     },
     {
       "source": "/(.*)",
