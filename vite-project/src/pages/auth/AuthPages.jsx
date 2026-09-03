@@ -580,6 +580,7 @@ export function CustomerSignInPage() {
               type="button"
               className="auth-social"
               onClick={() => {
+                authStorage.clearCustomerAuth();
                 authStorage.setCustomerAuth({ email: 'google.user@gmail.com', name: 'Google User', role: 'customer' });
                 n('/customer/home');
               }}
@@ -729,7 +730,21 @@ export function CustomerForgotPasswordPage() {
     <Frame eyebrow="ACCOUNT RECOVERY" title="Reset Password">
       <p className="auth-desc">Enter your registered email or phone to receive recovery instructions.</p>
       {!submitted ? (
-        <form onSubmit={async (e) => { e.preventDefault(); setLoading(true); setError(''); try { await authApi.requestPasswordReset({ identifier }); setSubmitted(true); } catch (err) { console.error(err); setError('Failed to send reset link. Please try again.'); } finally { setLoading(false); } }} className="clean-form">
+        <form onSubmit={async (e) => { 
+          e.preventDefault(); 
+          setLoading(true); 
+          setError(''); 
+          try { 
+            authStorage.clearCustomerAuth();
+            await authApi.requestPasswordReset({ identifier }); 
+            setSubmitted(true); 
+          } catch (err) { 
+            console.error(err); 
+            setError('Failed to send reset link. Please try again.'); 
+          } finally { 
+            setLoading(false); 
+          } 
+        }} className="clean-form">
           <TextField
             icon={Mail}
             label="Email or Mobile Number"

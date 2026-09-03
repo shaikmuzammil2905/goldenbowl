@@ -177,7 +177,7 @@
 .csi-hero-sub{font-size:12px;color:rgba(255,255,255,.6);margin:0;font-weight:500}
 
 /* ── FORM SHEET ──────────────────────────────────────────────── */
-.csi-sheet{flex:1;overflow-y:auto;background:#ffffff;border-radius:24px 24px 0 0;margin-top:-20px;padding:22px 20px 40px;position:relative;z-index:2;box-shadow:0 -8px 32px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:14px}
+.csi-sheet{flex:1;overflow-y:auto;background:#ffffff;border-radius:24px 24px 0 0;margin-top:-20px;padding:22px 20px 80px;position:relative;z-index:2;box-shadow:0 -8px 32px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:14px}
 .csi-sheet::-webkit-scrollbar{width:3px}
 .csi-sheet::-webkit-scrollbar-thumb{background:#e2d8c8;border-radius:2px}
 
