@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/auth/request-reset",
+      "destination": "/api/auth/request-reset"
+    },
+    {
       "source": "/api/:path*",
       "destination": "http://16.171.41.5:8080/api/:path*"
     },
