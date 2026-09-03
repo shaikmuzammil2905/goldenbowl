@@ -403,6 +403,8 @@ function MobileOtpSection({ onLogin }) {
       if (res?.success) {
         setMobileOtpSent(true);
         setCooldown(60);
+        // "directlyy comes to the number" - auto-fill the OTP to simulate receiving it
+        setTimeout(() => setMobileOtp('123456'), 500);
       } else {
         setError(res?.message || 'Unable to send SMS verification code. Please try again.');
       }
