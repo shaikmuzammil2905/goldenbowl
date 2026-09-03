@@ -567,11 +567,6 @@ export function CustomerSignInPage() {
             {mode === 'email-otp' && <EmailOtpSection onLogin={handleSuccessfulLogin} />}
             {mode === 'mobile-otp' && <MobileOtpSection onLogin={handleSuccessfulLogin} />}
 
-            {/* Sign Up Link */}
-            <p className="auth-switch-text" style={{ margin: '8px 0 4px' }}>
-              Need to create an account? <Link to="/customer/signup">Sign Up</Link>
-            </p>
-
             {/* OR Divider */}
             <div className="auth-divider">OR</div>
 
@@ -587,6 +582,12 @@ export function CustomerSignInPage() {
             >
               <GoogleIcon /> Continue with Google
             </button>
+
+            {/* Sign Up Link */}
+            <p className="auth-switch-text" style={{ margin: '8px 0 4px' }}>
+              Need to create an account? <Link to="/customer/signup">Sign Up</Link>
+            </p>
+
           </div>
         </main>
       </div>
