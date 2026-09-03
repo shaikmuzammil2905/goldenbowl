@@ -25,6 +25,8 @@ export default async function handler(req, res) {
       }
     });
 
+    const resetToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
     const mailOptions = {
       from: 'muzammilshaik826@gmail.com',
       to: email,
@@ -32,7 +34,7 @@ export default async function handler(req, res) {
       html: `
         <h1>Password Reset</h1>
         <p>You requested a password reset. Click the link below to set a new password:</p>
-        <a href="https://www.goldenfoodbowl.com/customer/login">Reset Password</a>
+        <a href="https://www.goldenfoodbowl.com/customer/reset-password?token=${resetToken}">Reset Password</a>
         <p>If you did not request this, please ignore this email.</p>
       `
     };

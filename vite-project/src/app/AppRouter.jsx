@@ -39,6 +39,7 @@ import {
   CustomerSignInPage,
   CustomerVerifyOtpPage,
   CustomerForgotPasswordPage,
+  CustomerResetPasswordPage,
   CustomerLocationPage,
   DeliverySignUpPage,
   DeliveryVerificationPage,
@@ -96,6 +97,7 @@ export function AppRouter() {
       <Route path="/customer/signup" element={<CustomerSignUpPage />} />
       <Route path="/customer/verify-otp" element={<CustomerVerifyOtpPage />} />
       <Route path="/customer/forgot-password" element={<CustomerForgotPasswordPage />} />
+      <Route path="/customer/reset-password" element={<CustomerResetPasswordPage />} />
       <Route path="/customer/location" element={<CustomerLocationPage />} />
       <Route path="/customer" element={<CustomerBrowseGuard />}>
         <Route element={<CustomerLayout />}>

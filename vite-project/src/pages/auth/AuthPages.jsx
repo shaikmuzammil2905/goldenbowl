@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Phone, UserRound, ShieldCheck, Car, FileText, Loader2, Eye, EyeOff, Lock, ArrowLeft } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { useGoogleLogin } from '@react-oauth/google';
 import { registerCustomer, registerDeliveryPartner } from '../../services/prototypeStore';
 import { usePrototypeContext } from '../../context/PrototypeContext';
 import { authStorage } from '../../services/storage/authStorage';
@@ -519,6 +520,20 @@ export function CustomerSignInPage() {
     n('/customer/home');
   };
 
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      // Phase 1 implementation: Call backend with tokenResponse.access_token
+      try {
+        // Mock backend verification for now, wait for AWS deployment
+        // const res = await fetch('/aws-api/auth/google', { ... });
+        handleSuccessfulLogin({ email: 'google.user@gmail.com', name: 'Google User' });
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    onError: () => console.log('Google Login Failed'),
+  });
+
   return (
     <div className="mobile-prototype-frame">
       <div className="mobile-app-shell">
@@ -568,11 +583,7 @@ export function CustomerSignInPage() {
             <button
               type="button"
               className="auth-social"
-              onClick={() => {
-                authStorage.clearCustomerAuth();
-                authStorage.setCustomerAuth({ email: 'google.user@gmail.com', name: 'Google User', role: 'customer' });
-                n('/customer/home');
-              }}
+              onClick={() => googleLogin()}
             >
               <GoogleIcon /> Continue with Google
             </button>
@@ -599,6 +610,19 @@ export function CustomerSignUpPage() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        // Mock backend verification for now, wait for AWS deployment
+        authStorage.setCustomerAuth({ email: 'google.user@gmail.com', name: 'Google User', role: 'customer' });
+        n('/customer/home');
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    onError: () => console.log('Google Login Failed'),
+  });
 
   const submit = async (e) => {
     e.preventDefault();
@@ -699,11 +723,7 @@ export function CustomerSignUpPage() {
       <button
         type="button"
         className="auth-social"
-        onClick={() => {
-          registerCustomer({ name: 'Google User', mobile: '', email: 'user@gmail.com' });
-          authStorage.setCustomerAuth({ email: 'user@gmail.com', name: 'Google User', role: 'customer' });
-          n('/customer/home');
-        }}
+        onClick={() => googleLogin()}
       >
         <GoogleIcon /> Sign up with Google
       </button>
@@ -763,6 +783,119 @@ export function CustomerForgotPasswordPage() {
             Return to Sign In
           </button>
         </div>
+      )}
+    </Frame>
+  );
+}
+
+export function CustomerResetPasswordPage() {
+  const n = useNavigate();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+
+    try {
+      // Phase 2 implementation: Call backend to reset password
+      const res = await fetch('/aws-api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password })
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setSuccess(true);
+      } else {
+        setError(data.message || 'Failed to reset password. The link might be expired.');
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!token) {
+    return (
+      <Frame eyebrow="ERROR" title="Invalid Link">
+        <p className="auth-desc">This password reset link is invalid or missing a token.</p>
+        <button type="button" className="auth-primary gold-btn" onClick={() => n('/customer/forgot-password')}>
+          Request a new link
+        </button>
+      </Frame>
+    );
+  }
+
+  return (
+    <Frame eyebrow="ACCOUNT RECOVERY" title="Create New Password">
+      <p className="auth-desc">Please enter your new password below.</p>
+      
+      {success ? (
+        <div style={{ textAlign: 'center', padding: '12px 0' }}>
+          <p style={{ fontSize: 13, color: '#166534', background: '#f0fdf4', padding: '12px', borderRadius: 10, border: '1px solid #bbf7d0' }}>
+            ✓ Your password has been successfully reset!
+          </p>
+          <button type="button" className="auth-primary gold-btn" onClick={() => n('/customer/signin')} style={{ marginTop: 12 }}>
+            Sign In Now
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="clean-form">
+          <label className="clean-field">
+            <span className="field-label"><Lock size={15} /> New Password</span>
+            <div className="csi-password-field">
+              <input
+                className="csi-password-input"
+                type={showPw ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                placeholder="Minimum 6 characters"
+                required
+              />
+              <button type="button" className="csi-pw-toggle" onClick={() => setShowPw(!showPw)} tabIndex={-1}>
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </label>
+          
+          <label className="clean-field">
+            <span className="field-label"><Lock size={15} /> Confirm Password</span>
+            <div className="csi-password-field">
+              <input
+                className="csi-password-input"
+                type={showPw ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                placeholder="Re-enter new password"
+                required
+              />
+            </div>
+          </label>
+
+          <ErrorBox msg={error} />
+
+          <button type="submit" className="auth-primary gold-btn" disabled={!password || !confirmPassword || loading}>
+            {loading ? <Loader2 size={16} className="animate-spin" /> : 'Reset Password'}
+          </button>
+        </form>
       )}
     </Frame>
   );

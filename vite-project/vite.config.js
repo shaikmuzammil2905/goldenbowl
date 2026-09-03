@@ -25,16 +25,24 @@ const localApiPlugin = () => ({
                   service: 'gmail',
                   auth: { user: 'muzammilshaik826@gmail.com', pass: 'gfge zbjv zlsx ouhx' }
                 });
-                const otp = Math.floor(100000 + Math.random() * 900000).toString();
-                const mailOptions = {
-                  from: 'muzammilshaik826@gmail.com',
-                  to: email,
-                  subject: req.url.includes('reset') ? 'Password Reset Request' : 'Your Verification Code',
-                  html: req.url.includes('reset') 
-                    ? `<h1>Password Reset</h1><a href="http://localhost:5173/customer/login">Reset Password</a>`
-                    : `<h1>Verification Code</h1><p>Your code is: <strong>${otp}</strong></p>`
-                };
-                await transporter.sendMail(mailOptions);
+                
+                if (req.url === '/api/auth/request-reset') {
+                  const resetToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                  await transporter.sendMail({
+                    from: 'muzammilshaik826@gmail.com',
+                    to: email,
+                    subject: 'Password Reset Request',
+                    html: `<h1>Password Reset</h1><p>Click here to reset your password: <a href="http://localhost:5173/customer/reset-password?token=${resetToken}">Reset Password</a></p>`
+                  });
+                } else {
+                  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+                  await transporter.sendMail({
+                    from: 'muzammilshaik826@gmail.com',
+                    to: email,
+                    subject: 'Your Verification Code',
+                    html: `<h1>Verification Code</h1><p>Your code is: <strong>${otp}</strong></p>`
+                  });
+                }
               }
               res.end(JSON.stringify({ success: true, message: 'Sent successfully.' }));
             } 
