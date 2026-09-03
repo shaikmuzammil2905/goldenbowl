@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/aws-api/(.*)",
+      "source": "/aws-api/:path*",
       "destination": "/api/proxy"
     },
     {

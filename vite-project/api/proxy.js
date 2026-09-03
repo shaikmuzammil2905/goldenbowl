@@ -1,7 +1,8 @@
 export default async function handler(req, res) {
-  // We will rewrite /aws-api/* to /api/proxy/*
-  // So req.url will be something like /api/proxy/auth/request-reset
-  const urlPath = req.url.replace(/^\/api\/proxy/, '');
+  // We will rewrite /aws-api/* to this proxy
+  // So req.url will be something like /aws-api/auth/login
+  // We need to strip /aws-api so we can append it to the backend URL
+  const urlPath = req.url.replace(/^\/aws-api/, '');
   
   const targetUrl = `http://16.171.41.5:8080/api${urlPath}`;
 
