@@ -40,50 +40,40 @@ export const authApi = {
 
   // ── Email OTP ─────────────────────────────────────────────────────────────
   async sendEmailOtp({ email }) {
-    const res = await fetch('/api/auth/send-otp', {
+    return apiClient('/auth/send-otp', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
+      body: { email }
     });
-    return res.json();
   },
 
   async verifyEmailOtp({ email, otp }) {
-    const res = await fetch('/api/auth/verify-otp', {
+    return apiClient('/auth/verify-otp', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, otp })
+      body: { email, otp }
     });
-    return res.json();
   },
 
   // ── Mobile OTP ────────────────────────────────────────────────────────────
   async sendMobileOtp({ mobile }) {
-    const res = await fetch('/api/auth/send-mobile-otp', {
+    return apiClient('/auth/send-mobile-otp', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mobile })
+      body: { mobile }
     });
-    return res.json();
   },
 
   async verifyMobileOtp({ mobile, otp }) {
-    const res = await fetch('/api/auth/verify-mobile-otp', {
+    return apiClient('/auth/verify-mobile-otp', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mobile, otp })
+      body: { mobile, otp }
     });
-    return res.json();
   },
 
   // ── Password Reset Request ────────────────────────────────────────
   async requestPasswordReset({ identifier }) {
-    const res = await fetch('/api/auth/request-reset', {
+    return apiClient('/auth/request-reset', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier })
+      body: { identifier }
     });
-    return res.json();
   },
 
   // ── Legacy Aliases ────────────────────────────────────────────────────────

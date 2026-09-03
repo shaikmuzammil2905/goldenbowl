@@ -522,16 +522,22 @@ export function CustomerSignInPage() {
 
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
-      // Phase 1 implementation: Call backend with tokenResponse.access_token
       try {
-        // Mock backend verification for now, wait for AWS deployment
-        // const res = await fetch('/aws-api/auth/google', { ... });
-        handleSuccessfulLogin({ email: 'google.user@gmail.com', name: 'Google User' });
+        const res = await apiClient('/auth/google-login', {
+          method: 'POST',
+          body: { token: tokenResponse.access_token }
+        });
+        if (res.success && res.user) {
+          handleSuccessfulLogin({ ...res.user, token: res.token });
+        } else {
+          console.error('Google login failed on backend:', res.message);
+        }
       } catch (err) {
         console.error(err);
       }
     },
     onError: () => console.log('Google Login Failed'),
+    prompt: 'select_account'
   });
 
   return (
@@ -614,14 +620,23 @@ export function CustomerSignUpPage() {
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
-        // Mock backend verification for now, wait for AWS deployment
-        authStorage.setCustomerAuth({ email: 'google.user@gmail.com', name: 'Google User', role: 'customer' });
-        n('/customer/home');
+        const res = await apiClient('/auth/google-login', {
+          method: 'POST',
+          body: { token: tokenResponse.access_token }
+        });
+        if (res.success && res.user) {
+          authStorage.setCustomerAuth({ ...res.user, token: res.token, role: 'customer' });
+          n('/customer/home');
+        } else {
+          setError(res.message || 'Google Login failed');
+        }
       } catch (err) {
         console.error(err);
+        setError('Network error during Google Login');
       }
     },
     onError: () => console.log('Google Login Failed'),
+    prompt: 'select_account'
   });
 
   const submit = async (e) => {

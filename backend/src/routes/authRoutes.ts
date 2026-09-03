@@ -18,6 +18,10 @@ router.post('/verify-mobile-otp', AuthController.verifyMobileOtp);
 
 // ── Password Reset ──────────────────────────────────────────────────────────
 router.post('/request-reset', AuthController.requestPasswordReset);
+router.post('/reset-password', AuthController.resetPassword);
+
+// ── Google OAuth Login ──────────────────────────────────────────────────────
+router.post('/google-login', AuthController.googleLogin);
 
 // ── Authenticated Session Endpoints ─────────────────────────────────────────
 router.post('/logout', authenticateToken, AuthController.logout);

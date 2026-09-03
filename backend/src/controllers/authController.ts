@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { AuthenticatedRequest } from '../types/index.js';
 import { UserRepository } from '../repositories/userRepository.js';
 import { sendOtpEmail, sendPasswordResetEmail } from '../services/emailService.js';
@@ -757,6 +758,130 @@ export class AuthController {
         message: isEmail
           ? `If an account exists for ${normalizedIdentifier}, a password reset link has been sent to your email.`
           : `If an account exists for +91 ${normalizedIdentifier}, recovery instructions have been sent via SMS.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ── RESET PASSWORD: POST /api/auth/reset-password ───────────────────────────
+  static async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { token, password } = req.body;
+      if (!token || !password || password.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid request. Please provide a valid token and a new password with at least 6 characters.',
+        });
+      }
+
+      // 1. Hash the provided token exactly as it was generated
+      const hashedToken = crypto.createHmac('sha256', OTP_SECRET).update(token).digest('hex');
+
+      // 2. Find the active, unexpired token record
+      const record = await prisma.otpCode.findFirst({
+        where: {
+          identifierType: 'PASSWORD_RESET',
+          otp: hashedToken,
+          used: false,
+          expiresAt: { gt: new Date() },
+        },
+      });
+
+      if (!record) {
+        return res.status(400).json({
+          success: false,
+          message: 'This password reset link is invalid or has expired. Please request a new one.',
+        });
+      }
+
+      // 3. Extract the identifier from `reset_email@example.com`
+      const actualIdentifier = record.identifier.replace(/^reset_/, '');
+
+      // 4. Find the user
+      const user = await UserRepository.findByIdentifier(actualIdentifier);
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: 'User associated with this reset link could not be found.',
+        });
+      }
+
+      // 5. Update the password
+      const newHashedPassword = hashPassword(password);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { password: newHashedPassword },
+      });
+
+      // 6. Invalidate the token
+      await prisma.otpCode.update({
+        where: { id: record.id },
+        data: { used: true },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Your password has been successfully reset. You can now log in.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ── GOOGLE OAUTH LOGIN: POST /api/auth/google-login ───────────────────────────
+  static async googleLogin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { token } = req.body;
+      if (!token) {
+        return res.status(400).json({ success: false, message: 'Google token is required.' });
+      }
+
+      // The frontend uses implicit grant (@react-oauth/google useGoogleLogin), providing an access_token.
+      // We verify it using the Google tokeninfo endpoint.
+      let payload: any;
+      try {
+        const response = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${token}`);
+        payload = await response.json();
+      } catch (e) {
+        return res.status(401).json({ success: false, message: 'Failed to connect to Google verification.' });
+      }
+
+      if (payload.error) {
+        return res.status(401).json({ success: false, message: 'Invalid Google token.' });
+      }
+
+      const { email, name = 'Google User' } = payload;
+      if (!email) {
+        return res.status(400).json({ success: false, message: 'Google account has no associated email.' });
+      }
+
+      const normalizedEmail = email.trim().toLowerCase();
+
+      // Find existing user or create
+      let user = await UserRepository.findByEmail(normalizedEmail);
+      if (!user) {
+        user = await UserRepository.createUser({
+          email: normalizedEmail,
+          name,
+          role: 'CUSTOMER',
+          provider: 'google',
+        });
+      }
+
+      const sessionToken = generateToken(user.id, user.role);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Google Login successful!',
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          mobile: user.mobile,
+          role: user.role,
+        },
+        token: sessionToken,
       });
     } catch (error) {
       next(error);
