@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Phone, UserRound, ShieldCheck, Car, FileText, Loader2, Eye, EyeOff, Lock, ArrowLeft } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
