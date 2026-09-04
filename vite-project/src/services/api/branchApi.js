@@ -5,6 +5,7 @@ export const branchApi = {
   async getBranches() {
     return apiClient('/admin/branches', {
       method: 'GET',
+      fallback: () => ({ data: getState().branches || [] })
     });
   },
 

@@ -6,15 +6,6 @@ import { MobileStatusBar } from '../layouts/CustomerLayout'
 export function DeliveryLayout() {
   const navigate = useNavigate()
   
-  useEffect(() => {
-    const handleAuthExpired = () => {
-      import('../services/storage/authStorage').then(m => m.authStorage.clearDeliveryAuth())
-      navigate('/delivery/signin', { replace: true })
-    }
-    window.addEventListener('auth-expired', handleAuthExpired)
-    return () => window.removeEventListener('auth-expired', handleAuthExpired)
-  }, [navigate])
-  
   const links = [
     ['dashboard', 'Home', LayoutDashboard],
     ['orders', 'Orders', PackageCheck],

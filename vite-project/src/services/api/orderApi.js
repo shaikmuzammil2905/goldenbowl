@@ -7,6 +7,7 @@ export const orderApi = {
     const endpoint = queryParams ? `/orders?${queryParams}` : '/orders';
     return apiClient(endpoint, {
       method: 'GET',
+      fallback: () => ({ data: getState().orders || [] })
     });
   },
 

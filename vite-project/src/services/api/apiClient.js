@@ -55,22 +55,6 @@ export async function apiClient(endpoint, { method = 'GET', body = null, headers
     const response = await fetch(url, config);
 
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        if (typeof window !== 'undefined') {
-          const isCustomer = window.location.pathname.startsWith('/customer') || window.location.pathname === '/';
-          if (!isCustomer) {
-             const activeRole = authStorage.getAnyActiveRole();
-             if (activeRole === 'admin') authStorage.clearAdminAuth();
-             if (activeRole === 'support') authStorage.clearSupportAuth();
-             if (activeRole === 'delivery') authStorage.clearDeliveryAuth();
-             if (activeRole === 'customer') authStorage.clearCustomerAuth();
-             
-             // Trigger event for UI to catch and redirect
-             window.dispatchEvent(new CustomEvent('auth-expired'));
-          }
-        }
-      }
-
       let errorMessage = `Request failed with status ${response.status}`;
       try {
         const errorData = await response.json();
