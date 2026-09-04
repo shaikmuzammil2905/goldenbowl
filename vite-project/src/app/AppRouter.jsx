@@ -131,7 +131,7 @@ export function AppRouter() {
       <Route path="/delivery/application-submitted" element={<DeliveryApplicationSubmittedPage />} />
       <Route path="/delivery" element={<DeliveryAuthGuard />}>
         <Route element={<DeliveryLayout />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route index element={<Navigate to="/delivery/dashboard" replace />} />
           <Route path="dashboard" element={<DeliveryDashboardPage />} />
           <Route path="orders" element={<DeliveryOrdersPage />} />
           <Route path="orders/:id" element={<DeliveryOrderDetailsPage />} />
@@ -146,7 +146,7 @@ export function AppRouter() {
       <Route path="/admin/login" element={<AdminSignInPage />} />
       <Route path="/admin" element={<AdminAuthGuard />}>
         <Route element={<AdminLayout />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="products" element={<ProductsPage />} />
@@ -163,7 +163,7 @@ export function AppRouter() {
       <Route path="/support/login" element={<SupportSignInPage />} />
       <Route path="/support" element={<SupportAuthGuard />}>
         <Route element={<SupportLayout />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route index element={<Navigate to="/support/dashboard" replace />} />
           <Route path="dashboard" element={<SupportDashboardPage />} />
           <Route path="orders" element={<SupportOrdersPage />} />
           <Route path="products" element={<SupportProductsPage />} />

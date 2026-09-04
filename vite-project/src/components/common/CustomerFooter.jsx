@@ -134,7 +134,8 @@ export function CustomerFooter({ onOpenAppModal }) {
               <Link to="/customer/search" style={{ color: 'inherit', textDecoration: 'none' }}>Menu &amp; Categories</Link>
               <Link to="/customer/offers" style={{ color: 'inherit', textDecoration: 'none' }}>Golden Offers</Link>
               <Link to="/customer/orders" style={{ color: 'inherit', textDecoration: 'none' }}>Track My Order</Link>
-              <Link to="/admin" style={{ color: 'inherit', textDecoration: 'none' }}>Admin Console</Link>
+              <Link to="/admin/dashboard" style={{ color: 'inherit', textDecoration: 'none' }}>Admin Console</Link>
+              <Link to="/delivery/signin" style={{ color: 'inherit', textDecoration: 'none' }}>Delivery Partner Portal</Link>
             </div>
           </div>
 

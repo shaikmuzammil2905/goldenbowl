@@ -785,6 +785,16 @@ function Profile() {
           <b>24x7 ›</b>
         </button>
 
+        <Link className="route-list-row profile-menu-item" to="/admin/dashboard" style={{ background: '#fffdf5', borderColor: '#fde68a' }}>
+          <span>🛡️ Admin Operations Portal</span>
+          <b style={{ color: '#b4811d' }}>Open ›</b>
+        </Link>
+
+        <Link className="route-list-row profile-menu-item" to="/delivery/dashboard" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
+          <span>🛵 Delivery Partner Portal</span>
+          <b style={{ color: '#16a34a' }}>Open ›</b>
+        </Link>
+
         <button type="button" className="route-list-row profile-menu-item danger" onClick={() => setActiveModal('logout')}>
           <span><LogOut size={17}/> Sign Out</span>
           <b>›</b>

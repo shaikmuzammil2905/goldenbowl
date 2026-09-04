@@ -45,19 +45,26 @@ export const authStorage = {
 
   // Admin Auth
   getAdminAuth() {
-    return sessionStorage.getItem(KEYS.ADMIN_AUTH) === '1';
+    return sessionStorage.getItem(KEYS.ADMIN_AUTH) === '1' || localStorage.getItem(KEYS.ADMIN_AUTH) === '1';
   },
   setAdminAuth(user = null) {
     sessionStorage.setItem(KEYS.ADMIN_AUTH, '1');
-    if (user) sessionStorage.setItem(KEYS.ADMIN_USER, JSON.stringify(user));
+    localStorage.setItem(KEYS.ADMIN_AUTH, '1');
+    if (user) {
+      const data = JSON.stringify(user);
+      sessionStorage.setItem(KEYS.ADMIN_USER, data);
+      localStorage.setItem(KEYS.ADMIN_USER, data);
+    }
   },
   clearAdminAuth() {
     sessionStorage.removeItem(KEYS.ADMIN_AUTH);
     sessionStorage.removeItem(KEYS.ADMIN_USER);
+    localStorage.removeItem(KEYS.ADMIN_AUTH);
+    localStorage.removeItem(KEYS.ADMIN_USER);
   },
   getAdminUser() {
     try {
-      const data = sessionStorage.getItem(KEYS.ADMIN_USER);
+      const data = sessionStorage.getItem(KEYS.ADMIN_USER) || localStorage.getItem(KEYS.ADMIN_USER);
       return data ? JSON.parse(data) : null;
     } catch {
       return null;

@@ -57,7 +57,7 @@ import './admin-content.css'
 
 export function AdminPage() {
   const { pathname } = useLocation()
-  const path = pathname.replace('/admin/', '') || 'dashboard'
+  const path = pathname.replace(/^\/admin\/?/, '').split('/')[0] || 'dashboard'
   
   const [liveOrders, setLiveOrders] = useState([])
   const [loadingOrders, setLoadingOrders] = useState(true)
@@ -92,7 +92,7 @@ export function AdminPage() {
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {path === 'dashboard' && <Dashboard orders={liveOrders} loading={loadingOrders} />}
+      {(path === 'dashboard' || !path || path === 'admin') && <Dashboard orders={liveOrders} loading={loadingOrders} />}
       {path === 'orders' && <Orders orders={liveOrders} loading={loadingOrders} fetchOrders={fetchOrders} />}
       {path === 'products' && <Products />}
       {path === 'categories' && <Categories />}
