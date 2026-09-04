@@ -57,8 +57,12 @@ export function DeliveryPartnerSignInPage() {
         method: 'POST',
         body: { mobile: mobile.trim(), otp: otp.trim() },
       });
-      if (data.success && data.data?.user) {
-        authStorage.setDeliveryAuth({ mobile: mobile.trim(), role: 'delivery' });
+      if (data.success && data.user) {
+        authStorage.setDeliveryAuth({ 
+          mobile: mobile.trim(), 
+          role: data.user.role || 'delivery',
+          token: data.token || data.accessToken
+        });
         navigate('/delivery/dashboard');
       } else {
         setError(data.message || 'Invalid verification code. Please try again.');

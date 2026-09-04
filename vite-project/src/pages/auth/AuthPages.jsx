@@ -178,7 +178,8 @@ function PasswordLoginSection({ onLogin }) {
 
       if (res?.success && (res?.user || res?.data?.user)) {
         const user = res.user || res.data?.user;
-        onLogin(user);
+        const token = res.token || res.accessToken || res.data?.token || res.data?.accessToken;
+        onLogin({ ...user, token });
       } else {
         setError(res?.message || 'Invalid login credentials. Please check your details.');
       }
@@ -289,8 +290,9 @@ function EmailOtpSection({ onLogin }) {
       const res = await authApi.verifyEmailOtp({ email: email.trim(), otp: emailOtp.trim() });
       if (res?.success && (res?.user || res?.data?.user)) {
         const user = res.user || res.data?.user;
-        authStorage.setCustomerAuth(user);
-        onLogin(user);
+        const token = res.token || res.accessToken || res.data?.token || res.data?.accessToken;
+        authStorage.setCustomerAuth({ ...user, token });
+        onLogin({ ...user, token });
       } else {
         setError(res?.message || 'Invalid verification code. Please check and try again.');
         setEmailOtp('');
@@ -427,8 +429,9 @@ function MobileOtpSection({ onLogin }) {
       const res = await authApi.verifyMobileOtp({ mobile: cleanNumber, otp: mobileOtp.trim() });
       if (res?.success && (res?.user || res?.data?.user)) {
         const user = res.user || res.data?.user;
-        authStorage.setCustomerAuth(user);
-        onLogin(user);
+        const token = res.token || res.accessToken || res.data?.token || res.data?.accessToken;
+        authStorage.setCustomerAuth({ ...user, token });
+        onLogin({ ...user, token });
       } else {
         setError(res?.message || 'Invalid verification code. Please check and try again.');
         setMobileOtp('');

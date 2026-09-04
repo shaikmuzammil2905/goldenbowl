@@ -13,11 +13,27 @@ export function AdminSignInPage() {
   const [password, setPassword] = useState('');
   const valid = email.trim() && password.trim();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     if (e) e.preventDefault();
     if (!valid) return;
-    authStorage.setAdminAuth({ email, role: 'admin' });
-    navigate('/admin/dashboard');
+
+    try {
+      // Dynamic import to avoid circular dependencies if any
+      const { apiClient } = await import('../../services/api/apiClient');
+      const response = await apiClient('/auth/login', {
+        method: 'POST',
+        body: { identifier: email, password, role: 'ADMIN' },
+      });
+
+      authStorage.setAdminAuth({ 
+        email: response.user?.email || email, 
+        role: response.user?.role || 'admin',
+        token: response.token || response.accessToken
+      });
+      navigate('/admin/dashboard');
+    } catch (err) {
+      alert("Login Failed: " + err.message);
+    }
   };
 
   return (

@@ -13,11 +13,25 @@ export function SupportSignInPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     if (email && password) {
-      authStorage.setSupportAuth({ email, role: 'support' });
-      navigate('/support/dashboard', { replace: true });
+      try {
+        const { apiClient } = await import('../../services/api/apiClient');
+        const response = await apiClient('/auth/login', {
+          method: 'POST',
+          body: { identifier: email, password, role: 'SUPPORT' },
+        });
+
+        authStorage.setSupportAuth({ 
+          email: response.user?.email || email, 
+          role: response.user?.role || 'support',
+          token: response.token || response.accessToken
+        });
+        navigate('/support/dashboard', { replace: true });
+      } catch (err) {
+        setError('Login Failed: ' + err.message);
+      }
     } else {
       setError('Please enter valid email and password.');
     }
