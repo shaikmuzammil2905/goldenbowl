@@ -31,6 +31,20 @@ export class DeliveryController {
     }
   }
 
+  static async getCurrentPartner(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const dashboardData = await DeliveryService.getCurrentPartnerDashboard(userId);
+      res.status(200).json({ success: true, data: dashboardData });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getPartnerProfile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const partnerId = req.params.id as string;

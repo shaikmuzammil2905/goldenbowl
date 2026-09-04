@@ -31,10 +31,12 @@ export function DeliveryPartnerSignInPage() {
       });
 
       if (data.success && data.user) {
+        authStorage.clearDeliveryAuth();
         authStorage.setDeliveryAuth({
           id: data.user.id,
           name: data.user.name,
           email: data.user.email,
+          mobile: data.user.mobile || '',
           role: data.user.role || 'delivery',
           token: data.token || data.accessToken,
         });

@@ -12,25 +12,73 @@ import {
   CreditCard,
   Store,
   Power,
-  LogOut
+  LogOut,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react'
-import { useState } from 'react'
-import { usePrototypeContext } from '../../context/PrototypeContext'
-import { updateOrderStatus } from '../../services/prototypeStore'
+import { useState, useEffect, useCallback } from 'react'
+import { apiClient } from '../../services/api/apiClient'
+import { authStorage } from '../../services/storage/authStorage'
 import { NotificationPanel } from '../../components/notifications/NotificationPanel'
 import './delivery.css'
 
 export function DeliveryPage() {
   const { pathname } = useLocation()
   const path = pathname.replace('/delivery/', '') || 'dashboard'
-  const { orders, notifications } = usePrototypeContext()
+  const navigate = useNavigate()
 
-  // Find active orders assigned to current partner
-  const assigned = orders.filter(
-    o => o.driver === 'Rahul Kumar' && o.status !== 'DELIVERED'
-  )
-  const current = assigned[0] || orders[0]
+  const [partnerData, setPartnerData] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [duty, setDuty] = useState(true)
+  const [notifications, setNotifications] = useState([])
+
+  const deliveryUser = authStorage.getDeliveryUser()
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      const res = await apiClient('/delivery/me')
+      if (res && res.success && res.data) {
+        setPartnerData(res.data)
+      }
+    } catch (err) {
+      console.error('Failed to load delivery partner dashboard:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    // Check if delivery partner is logged in
+    if (!authStorage.getDeliveryAuth()) {
+      navigate('/delivery/signin', { replace: true })
+      return
+    }
+    loadDashboard()
+  }, [loadDashboard, navigate, pathname])
+
+  // Derive authenticated partner attributes
+  const partner = partnerData?.partner || {}
+  const name = partner.name || deliveryUser?.name || 'Delivery Partner'
+  const initials = name
+    .split(' ')
+    .filter(Boolean)
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'DP'
+
+  const stats = partnerData?.stats || {}
+  const todayPay = stats.todayPay !== undefined ? stats.todayPay : Number(partner.earnings || 0)
+  const trips = stats.trips !== undefined ? stats.trips : Number(partner.trips || 0)
+  const onTimeRate = stats.onTimeRate !== undefined ? stats.onTimeRate : (trips > 0 ? 100 : 0)
+  const acceptanceRate = stats.acceptanceRate !== undefined ? stats.acceptanceRate : (trips > 0 ? 100 : 0)
+  const rating = partner.rating ? Number(partner.rating).toFixed(1) : '5.0'
+
+  // Orders scoping
+  const assigned = partnerData?.activeOrders || []
+  const completed = partnerData?.completedOrders || []
+  const allOrders = partnerData?.assignedOrders || []
+  const current = assigned[0] || null
 
   return (
     <div className="dp-portal">
@@ -39,12 +87,12 @@ export function DeliveryPage() {
         <div className="dp-header-top">
           <div className="dp-driver-info">
             <div className="dp-avatar-wrap">
-              <div className="dp-avatar">RK</div>
+              <div className="dp-avatar">{initials}</div>
               <div className={`dp-online-dot ${duty ? '' : 'offline'}`} />
             </div>
             <div className="dp-driver-meta">
-              <strong>Rahul Kumar</strong>
-              <span>Partner • 4.9 ★</span>
+              <strong>{name}</strong>
+              <span>Partner • {rating} ★</span>
             </div>
           </div>
 
@@ -57,6 +105,15 @@ export function DeliveryPage() {
               <Power size={13} />
               {duty ? 'ONLINE' : 'OFFLINE'}
             </button>
+            <button
+              type="button"
+              className="dp-notif-btn"
+              onClick={loadDashboard}
+              title="Refresh Dashboard Data"
+              style={{ background: 'none', border: 'none', color: '#78716c', cursor: 'pointer' }}
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
             <Link to="/delivery/notifications" className="dp-notif-btn" aria-label="Notifications">
               <Bell size={18} />
               {notifications.length > 0 && <span className="dp-notif-badge" />}
@@ -64,44 +121,89 @@ export function DeliveryPage() {
           </div>
         </div>
 
-        {/* ── METRICS GRID ── */}
+        {/* ── METRICS GRID (DYNAMICALLY SCOPED) ── */}
         <div className="dp-stats-grid">
           <div className="dp-stat-item">
             <span>Today's Pay</span>
-            <strong>₹1,420</strong>
-            <small>+₹150 Tip</small>
+            <strong>₹{todayPay.toLocaleString('en-IN')}</strong>
+            <small>{todayPay > 0 ? '+ Tips Included' : 'No Trips Yet'}</small>
           </div>
           <div className="dp-stat-item">
             <span>Trips</span>
-            <strong>{assigned.length + 8}</strong>
-            <small>Completed</small>
+            <strong>{trips}</strong>
+            <small>{trips > 0 ? `${completed.length} Completed` : '0 Completed'}</small>
           </div>
           <div className="dp-stat-item">
             <span>On-Time</span>
-            <strong>100%</strong>
-            <small>Target 95%</small>
+            <strong>{onTimeRate}%</strong>
+            <small>{trips > 0 ? 'Target 95%' : 'No Trips Yet'}</small>
           </div>
           <div className="dp-stat-item">
             <span>Acceptance</span>
-            <strong>98%</strong>
-            <small>High Priority</small>
+            <strong>{acceptanceRate}%</strong>
+            <small>{duty ? 'Active Duty' : 'On Break'}</small>
           </div>
         </div>
       </header>
 
       {/* ── ROUTE PAGES ── */}
       <div className="dp-body">
-        {path === 'dashboard' && (
-          <DashboardView current={current} assigned={assigned} duty={duty} setDuty={setDuty} />
-        )}
-        {path === 'orders' && <OrdersView assigned={assigned} allOrders={orders} />}
-        {path.startsWith('orders/') && <OrderDetailsView id={path.split('/')[1]} />}
-        {path.startsWith('navigation/') && <NavigationView id={path.split('/')[1]} />}
-        {path === 'gigs' && <GigsView />}
-        {path === 'wallet' && <WalletView />}
-        {path === 'profile' && <DeliveryProfile />}
-        {path === 'notifications' && (
-          <NotificationPanel notifications={notifications} role="delivery" />
+        {loading && !partnerData ? (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#78716c' }}>
+            <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 12px', color: '#ca8a04' }} />
+            <p style={{ fontSize: 13, fontWeight: 600 }}>Loading partner account...</p>
+          </div>
+        ) : (
+          <>
+            {path === 'dashboard' && (
+              <DashboardView
+                current={current}
+                assigned={assigned}
+                duty={duty}
+                setDuty={setDuty}
+                onRefresh={loadDashboard}
+              />
+            )}
+            {path === 'orders' && (
+              <OrdersView
+                assigned={assigned}
+                completed={completed}
+                allOrders={allOrders}
+                onRefresh={loadDashboard}
+              />
+            )}
+            {path.startsWith('orders/') && (
+              <OrderDetailsView
+                id={path.split('/')[1]}
+                allOrders={allOrders}
+                onRefresh={loadDashboard}
+              />
+            )}
+            {path.startsWith('navigation/') && (
+              <NavigationView
+                id={path.split('/')[1]}
+                allOrders={allOrders}
+              />
+            )}
+            {path === 'gigs' && <GigsView trips={trips} completedCount={completed.length} />}
+            {path === 'wallet' && (
+              <WalletView
+                partner={partner}
+                completed={completed}
+                todayPay={todayPay}
+              />
+            )}
+            {path === 'profile' && (
+              <DeliveryProfile
+                partner={partner}
+                deliveryUser={deliveryUser}
+                onRefresh={loadDashboard}
+              />
+            )}
+            {path === 'notifications' && (
+              <NotificationPanel notifications={notifications} role="delivery" />
+            )}
+          </>
         )}
       </div>
     </div>
@@ -109,15 +211,33 @@ export function DeliveryPage() {
 }
 
 /* ── DASHBOARD VIEW ──────────────────────────────────────────── */
-function DashboardView({ current, assigned, duty, setDuty }) {
-  const advanceStatus = (order) => {
+function DashboardView({ current, assigned, duty, setDuty, onRefresh }) {
+  const [advancing, setAdvancing] = useState(false)
+
+  const advanceStatus = async (order) => {
     const statusMap = {
+      CONFIRMED: 'ASSIGNED',
       ASSIGNED: 'PICKED_UP',
       PICKED_UP: 'OUT_FOR_DELIVERY',
       OUT_FOR_DELIVERY: 'DELIVERED',
     }
     const next = statusMap[order.status]
-    if (next) updateOrderStatus(order.id, next)
+    if (!next) return
+
+    setAdvancing(true)
+    try {
+      const res = await apiClient(`/orders/${order.id}/status`, {
+        method: 'PATCH',
+        body: { status: next },
+      })
+      if (res && res.success) {
+        await onRefresh()
+      }
+    } catch (err) {
+      console.error('Failed to advance order status:', err)
+    } finally {
+      setAdvancing(false)
+    }
   }
 
   const getButtonText = (status) => {
@@ -137,7 +257,9 @@ function DashboardView({ current, assigned, duty, setDuty }) {
         <div className="dp-duty-banner-left">
           <div className={duty ? 'dp-pulse-dot' : ''} />
           <span>
-            {duty ? 'You are Online • Receiving orders in Indiranagar' : 'You are Offline • Turn on duty to accept orders'}
+            {duty
+              ? 'You are Online • Ready to accept orders in your zone'
+              : 'You are Offline • Turn on duty to accept orders'}
           </span>
         </div>
         <button
@@ -152,7 +274,7 @@ function DashboardView({ current, assigned, duty, setDuty }) {
       {/* Active Assignment Section */}
       <div className="dp-section-title">
         <h2>Active Assignment</h2>
-        <span>{assigned.length} Active Task</span>
+        <span>{assigned.length} Active Task{assigned.length === 1 ? '' : 's'}</span>
       </div>
 
       {current ? (
@@ -161,10 +283,10 @@ function DashboardView({ current, assigned, duty, setDuty }) {
           <div className="dp-order-head">
             <div className="dp-order-id">
               <strong>#{current.id}</strong>
-              <span>• {current.type || 'Standard Delivery'}</span>
+              <span>• {current.orderType || 'Delivery'}</span>
             </div>
-            <span className={`dp-status-pill ${current.status.toLowerCase()}`}>
-              {current.status.replaceAll('_', ' ')}
+            <span className={`dp-status-pill ${current.status?.toLowerCase() || 'assigned'}`}>
+              {current.status?.replaceAll('_', ' ') || 'ASSIGNED'}
             </span>
           </div>
 
@@ -196,8 +318,8 @@ function DashboardView({ current, assigned, duty, setDuty }) {
             </div>
             <div className="dp-loc-info">
               <span className="dp-loc-tag store">Pickup Location</span>
-              <strong>{current.branch || 'Golden Food Bowl - Indiranagar'}</strong>
-              <p>100ft Road, 12th Main, Indiranagar • 1.2 km away</p>
+              <strong>{current.branch || 'Golden Food Bowl Store'}</strong>
+              <p>{current.branchAddress || 'Store Location'}</p>
             </div>
             <div className="dp-loc-actions">
               <a href="tel:9876543210" className="dp-icon-btn" title="Call Store">
@@ -213,13 +335,15 @@ function DashboardView({ current, assigned, duty, setDuty }) {
             </div>
             <div className="dp-loc-info">
               <span className="dp-loc-tag customer">Drop-off Location</span>
-              <strong>{current.customer || 'Priya Sharma'}</strong>
-              <p>42, 5th Main Road, Indiranagar • 2.3 km from store</p>
+              <strong>{current.customer || 'Customer'}</strong>
+              <p>{current.customerPhone ? `Mobile: ${current.customerPhone}` : 'Customer Address'}</p>
             </div>
             <div className="dp-loc-actions">
-              <a href="tel:9876543210" className="dp-icon-btn" title="Call Customer">
-                <Phone size={15} />
-              </a>
+              {current.customerPhone && (
+                <a href={`tel:${current.customerPhone}`} className="dp-icon-btn" title="Call Customer">
+                  <Phone size={15} />
+                </a>
+              )}
             </div>
           </div>
 
@@ -241,9 +365,10 @@ function DashboardView({ current, assigned, duty, setDuty }) {
               <button
                 type="button"
                 className="dp-advance-btn"
+                disabled={advancing}
                 onClick={() => advanceStatus(current)}
               >
-                {getButtonText(current.status)}
+                {advancing ? 'Updating Status...' : getButtonText(current.status)}
               </button>
             ) : (
               <div style={{ textAlign: 'center', padding: '10px', color: '#16a34a', fontWeight: 800 }}>
@@ -257,11 +382,11 @@ function DashboardView({ current, assigned, duty, setDuty }) {
           </div>
         </div>
       ) : (
-        <div className="dp-order-card" style={{ textAlign: 'center', padding: '30px' }}>
-          <PackageCheck size={40} style={{ color: '#ca8a04', margin: 'auto' }} />
-          <h3 style={{ margin: '10px 0 4px', fontSize: 16 }}>No Active Order</h3>
-          <p style={{ margin: 0, fontSize: 11, color: '#78716c' }}>
-            You are online and in high-demand zone. New orders will appear here automatically.
+        <div className="dp-order-card" style={{ textAlign: 'center', padding: '36px 20px' }}>
+          <PackageCheck size={44} style={{ color: '#ca8a04', margin: '0 auto 12px' }} />
+          <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800 }}>No Active Order</h3>
+          <p style={{ margin: 0, fontSize: 12, color: '#78716c', lineHeight: 1.5 }}>
+            You are online and on active duty. New delivery orders assigned to your route will appear here automatically.
           </p>
         </div>
       )}
@@ -270,12 +395,10 @@ function DashboardView({ current, assigned, duty, setDuty }) {
 }
 
 /* ── ORDERS HUB VIEW ─────────────────────────────────────────── */
-function OrdersView({ allOrders }) {
+function OrdersView({ assigned, completed, allOrders, onRefresh }) {
   const [tab, setTab] = useState('active') // 'active' | 'completed'
 
-  const activeOrders = allOrders.filter(o => o.status !== 'DELIVERED')
-  const completedOrders = allOrders.filter(o => o.status === 'DELIVERED')
-  const displayed = tab === 'active' ? activeOrders : completedOrders
+  const displayed = tab === 'active' ? assigned : completed
 
   return (
     <>
@@ -290,14 +413,14 @@ function OrdersView({ allOrders }) {
           className={`dp-orders-tab ${tab === 'active' ? 'active' : ''}`}
           onClick={() => setTab('active')}
         >
-          Active Orders ({activeOrders.length})
+          Active Orders ({assigned.length})
         </button>
         <button
           type="button"
           className={`dp-orders-tab ${tab === 'completed' ? 'active' : ''}`}
           onClick={() => setTab('completed')}
         >
-          Completed Today ({completedOrders.length})
+          Completed ({completed.length})
         </button>
       </div>
 
@@ -307,12 +430,12 @@ function OrdersView({ allOrders }) {
             <Link key={o.id} to={`/delivery/orders/${o.id}`} className="dp-list-order-card">
               <div className="dp-list-order-row">
                 <span className="dp-list-order-id">#{o.id}</span>
-                <span className={`dp-status-pill ${o.status.toLowerCase()}`}>
-                  {o.status.replaceAll('_', ' ')}
+                <span className={`dp-status-pill ${o.status?.toLowerCase() || 'assigned'}`}>
+                  {o.status?.replaceAll('_', ' ') || 'ASSIGNED'}
                 </span>
               </div>
               <div style={{ fontSize: 11, color: '#78716c', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <div><strong>Store:</strong> {o.branch}</div>
+                <div><strong>Store:</strong> {o.branch || 'Golden Food Bowl'}</div>
                 <div><strong>Customer:</strong> {o.customer} • ₹{o.total}</div>
               </div>
               <div className="dp-list-order-row" style={{ paddingTop: 6, borderTop: '1px dashed #eee4d2' }}>
@@ -322,9 +445,11 @@ function OrdersView({ allOrders }) {
             </Link>
           ))
         ) : (
-          <p style={{ textAlign: 'center', color: '#78716c', padding: 20 }}>
-            No {tab} orders to display.
-          </p>
+          <div style={{ textAlign: 'center', color: '#78716c', padding: '36px 20px' }}>
+            <p style={{ margin: 0, fontSize: 13 }}>
+              No {tab} orders found for your account.
+            </p>
+          </div>
         )}
       </div>
     </>
@@ -332,21 +457,52 @@ function OrdersView({ allOrders }) {
 }
 
 /* ── ORDER DETAILS VIEW ──────────────────────────────────────── */
-function OrderDetailsView({ id }) {
-  const { orders } = usePrototypeContext()
-  const order = orders.find(o => o.id === id) || orders[0]
+function OrderDetailsView({ id, allOrders, onRefresh }) {
   const navigate = useNavigate()
+  const [advancing, setAdvancing] = useState(false)
 
-  if (!order) return <p>Order not found.</p>
+  const order = allOrders.find(o => o.id === id)
 
-  const advanceStatus = () => {
+  if (!order) {
+    return (
+      <div style={{ padding: 20, textAlign: 'center' }}>
+        <p style={{ color: '#78716c', marginBottom: 12 }}>Order not found or not assigned to your account.</p>
+        <button
+          type="button"
+          className="dp-advance-btn"
+          style={{ width: 'fit-content', margin: '0 auto' }}
+          onClick={() => navigate('/delivery/dashboard')}
+        >
+          ← Back to Dashboard
+        </button>
+      </div>
+    )
+  }
+
+  const advanceStatus = async () => {
     const statusMap = {
+      CONFIRMED: 'ASSIGNED',
       ASSIGNED: 'PICKED_UP',
       PICKED_UP: 'OUT_FOR_DELIVERY',
       OUT_FOR_DELIVERY: 'DELIVERED',
     }
     const next = statusMap[order.status]
-    if (next) updateOrderStatus(order.id, next)
+    if (!next) return
+
+    setAdvancing(true)
+    try {
+      const res = await apiClient(`/orders/${order.id}/status`, {
+        method: 'PATCH',
+        body: { status: next },
+      })
+      if (res && res.success) {
+        await onRefresh()
+      }
+    } catch (err) {
+      console.error('Failed to advance order status:', err)
+    } finally {
+      setAdvancing(false)
+    }
   }
 
   return (
@@ -364,8 +520,8 @@ function OrderDetailsView({ id }) {
           <div className="dp-order-id">
             <strong>Order #{order.id}</strong>
           </div>
-          <span className={`dp-status-pill ${order.status.toLowerCase()}`}>
-            {order.status.replaceAll('_', ' ')}
+          <span className={`dp-status-pill ${order.status?.toLowerCase() || 'assigned'}`}>
+            {order.status?.replaceAll('_', ' ') || 'ASSIGNED'}
           </span>
         </div>
 
@@ -373,8 +529,8 @@ function OrderDetailsView({ id }) {
           <div className="dp-loc-icon store"><Store size={18} /></div>
           <div className="dp-loc-info">
             <span className="dp-loc-tag store">Pickup</span>
-            <strong>{order.branch}</strong>
-            <p>12th Main Road, Indiranagar</p>
+            <strong>{order.branch || 'Golden Food Bowl'}</strong>
+            <p>{order.branchAddress || 'Store Location'}</p>
           </div>
         </div>
 
@@ -382,15 +538,15 @@ function OrderDetailsView({ id }) {
           <div className="dp-loc-icon customer"><MapPin size={18} /></div>
           <div className="dp-loc-info">
             <span className="dp-loc-tag customer">Drop-off</span>
-            <strong>{order.customer}</strong>
-            <p>42, 5th Main Road, Bengaluru</p>
+            <strong>{order.customer || 'Customer'}</strong>
+            <p>{order.customerPhone ? `Mobile: ${order.customerPhone}` : 'Customer Delivery Address'}</p>
           </div>
         </div>
 
         <div className="dp-action-stack">
           {order.status !== 'DELIVERED' && (
-            <button type="button" className="dp-advance-btn" onClick={advanceStatus}>
-              Advance Order Status →
+            <button type="button" className="dp-advance-btn" disabled={advancing} onClick={advanceStatus}>
+              {advancing ? 'Updating...' : 'Advance Order Status →'}
             </button>
           )}
           <Link to={`/delivery/navigation/${order.id}`} className="dp-nav-btn">
@@ -403,8 +559,9 @@ function OrderDetailsView({ id }) {
 }
 
 /* ── NAVIGATION MAP VIEW ─────────────────────────────────────── */
-function NavigationView() {
+function NavigationView({ id, allOrders }) {
   const navigate = useNavigate()
+  const order = allOrders.find(o => o.id === id)
 
   return (
     <div className="dp-nav-container">
@@ -419,7 +576,7 @@ function NavigationView() {
       <div className="dp-nav-hero-banner">
         <div>
           <h1>GPS Navigation</h1>
-          <p>Live route tracking & turn-by-turn guidance</p>
+          <p>{order ? `Route for Order #${order.id}` : 'Live route tracking & turn-by-turn guidance'}</p>
         </div>
         <Navigation size={28} style={{ color: '#f5c518' }} />
       </div>
@@ -428,8 +585,8 @@ function NavigationView() {
         <div className="dp-map-turn-instruction">
           <span className="dp-turn-icon">↪</span>
           <div className="dp-turn-text">
-            <strong>In 150m, turn right onto 100ft Road</strong>
-            <span>Then head straight for 1.2 km</span>
+            <strong>Heading to destination</strong>
+            <span>Follow live GPS route on your mobile</span>
           </div>
         </div>
 
@@ -446,67 +603,105 @@ function NavigationView() {
         </div>
       </div>
 
-      <div className="dp-quick-contacts">
-        <a href="tel:9876543210" className="dp-contact-btn">
-          <Phone size={14} /> Call Customer
-        </a>
-        <a href="tel:9876543210" className="dp-contact-btn">
-          <Store size={14} /> Call Restaurant
-        </a>
-      </div>
+      {order?.customerPhone && (
+        <div className="dp-quick-contacts">
+          <a href={`tel:${order.customerPhone}`} className="dp-contact-btn">
+            <Phone size={14} /> Call Customer
+          </a>
+        </div>
+      )}
     </div>
   )
 }
 
 /* ── PARTNER PROFILE VIEW ────────────────────────────────────── */
-function DeliveryProfile() {
+function DeliveryProfile({ partner, deliveryUser, onRefresh }) {
   const navigate = useNavigate()
-  const saved = JSON.parse(localStorage.getItem('bowlDeliveryOnboarding') || '{}')
   const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const currentName = partner.name || deliveryUser?.name || ''
+  const currentEmail = partner.email || deliveryUser?.email || ''
+  const currentMobile = partner.mobile || deliveryUser?.mobile || ''
+  const currentVehicle = partner.vehicle || 'Bike'
+
   const [data, setData] = useState({
-    name: saved.name || 'Rahul Kumar',
-    email: saved.email || 'partner@example.com',
-    mobile: saved.mobile || '9876543210',
-    vehicle: saved.vehicle || 'Bike',
-    vehicleNumber: saved.vehicleNumber || 'KA01AB1234',
-    licence: saved.licence || 'DL-XXXX-1234',
-    idProof: saved.idProof || 'ID-XXXX',
-    bank: saved.bank || 'Account details',
-    upi: saved.upi || 'rahul@upi'
+    name: currentName,
+    email: currentEmail,
+    mobile: currentMobile,
+    vehicle: currentVehicle,
+    vehicleNumber: 'KA-01-AB-1234',
+    licence: 'Verified on Signup',
+    idProof: 'Verified Aadhaar',
+    bank: 'Bank Account Linked',
+    upi: '',
   })
 
+  useEffect(() => {
+    setData(prev => ({
+      ...prev,
+      name: currentName,
+      email: currentEmail,
+      mobile: currentMobile,
+      vehicle: currentVehicle,
+    }))
+  }, [currentName, currentEmail, currentMobile, currentVehicle])
+
   const set = (k, v) => setData(d => ({ ...d, [k]: v }))
-  const save = () => {
-    localStorage.setItem('bowlDeliveryOnboarding', JSON.stringify({ ...saved, ...data }))
-    setEditing(false)
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      if (partner.id) {
+        await apiClient(`/delivery/partners/${partner.id}`, {
+          method: 'PUT',
+          body: {
+            name: data.name,
+            mobile: data.mobile,
+            vehicle: data.vehicle,
+          },
+        })
+        await onRefresh()
+      }
+      setEditing(false)
+    } catch (err) {
+      console.error('Failed to update partner profile:', err)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const signOut = () => {
-    localStorage.removeItem('bowlDeliveryOnboarding')
-    localStorage.removeItem('bowlDeliveryLocation')
-    sessionStorage.removeItem('bowlDeliveryMobile')
-    sessionStorage.removeItem('bowlDeliveryAuth')
+    authStorage.clearDeliveryAuth()
     navigate('/delivery/signin', { replace: true })
   }
+
+  const initials = (data.name || 'DP')
+    .split(' ')
+    .filter(Boolean)
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 
   return (
     <div className="dp-profile-card">
       <div className="dp-profile-top">
-        <div className="dp-profile-avatar">RK</div>
+        <div className="dp-profile-avatar">{initials}</div>
         <div className="dp-profile-info">
-          <h1>{data.name}</h1>
+          <h1>{data.name || 'Delivery Partner'}</h1>
           <p>Verified Bowl Delivery Partner</p>
           <div className="dp-badge-row">
-            <span className="dp-badge-chip">✓ Verified Partner</span>
+            <span className="dp-badge-chip">✓ {partner.verificationStatus === 'VERIFIED' ? 'Verified Partner' : 'Partner Account'}</span>
             <span className="dp-badge-chip" style={{ background: '#fffdf0', color: '#854d0e', borderColor: '#fde047' }}>
-              ★ 4.9 Rating
+              ★ {partner.rating ? Number(partner.rating).toFixed(1) : '5.0'} Rating
             </span>
           </div>
         </div>
       </div>
 
       <div className="dp-section-title" style={{ marginTop: 4 }}>
-        <h2 style={{ fontSize: 13 }}>Partner Documents & Details</h2>
+        <h2 style={{ fontSize: 13 }}>Partner Account &amp; Details</h2>
         <button
           type="button"
           style={{ background: 'none', border: 0, color: '#ca8a04', fontWeight: 800, cursor: 'pointer', fontSize: 11 }}
@@ -518,18 +713,16 @@ function DeliveryProfile() {
 
       <div className="dp-profile-grid">
         <ProfileField icon={UserRound} label="Full Name" value={data.name} edit={editing} onChange={v => set('name', v)} />
-        <ProfileField icon={Mail} label="Email Address" value={data.email} edit={editing} onChange={v => set('email', v)} />
+        <ProfileField icon={Mail} label="Email Address" value={data.email} edit={false} />
         <ProfileField icon={Phone} label="Mobile Number" value={data.mobile} edit={editing} onChange={v => set('mobile', v)} />
-        <ProfileField icon={Car} label="Vehicle Details" value={`${data.vehicle} • ${data.vehicleNumber}`} edit={editing} onChange={v => set('vehicleNumber', v)} />
-        <ProfileField icon={FileText} label="Driving Licence" value={data.licence} edit={editing} onChange={v => set('licence', v)} />
-        <ProfileField icon={FileText} label="Identity Proof (Aadhaar)" value={data.idProof} edit={editing} onChange={v => set('idProof', v)} />
-        <ProfileField icon={CreditCard} label="Bank Account" value={data.bank} edit={editing} onChange={v => set('bank', v)} />
-        <ProfileField icon={CreditCard} label="UPI Payout ID" value={data.upi} edit={editing} onChange={v => set('upi', v)} />
+        <ProfileField icon={Car} label="Vehicle Details" value={data.vehicle} edit={editing} onChange={v => set('vehicle', v)} />
+        <ProfileField icon={FileText} label="Verification Status" value={partner.verificationStatus || 'ACTIVE'} edit={false} />
+        <ProfileField icon={CreditCard} label="Fee Status" value={partner.feeStatus || 'PAID'} edit={false} />
       </div>
 
       {editing ? (
-        <button type="button" className="dp-advance-btn" onClick={save}>
-          Save Profile Changes
+        <button type="button" className="dp-advance-btn" disabled={saving} onClick={save}>
+          {saving ? 'Saving...' : 'Save Profile Changes'}
         </button>
       ) : (
         <button
@@ -552,9 +745,9 @@ function ProfileField({ icon: Icon, label, value, edit, onChange }) {
       <div>
         <span>{label}</span>
         {edit ? (
-          <input value={value} onChange={e => onChange(e.target.value)} />
+          <input value={value || ''} onChange={e => onChange(e.target.value)} />
         ) : (
-          <strong>{value}</strong>
+          <strong>{value || 'Not set'}</strong>
         )}
       </div>
     </div>
@@ -562,25 +755,28 @@ function ProfileField({ icon: Icon, label, value, edit, onChange }) {
 }
 
 /* ── GIGS / SHIFTS & INCENTIVES VIEW ─────────────────────────── */
-function GigsView() {
-  const [reserved, setReserved] = useState({ 1: true, 2: true, 3: false, 4: false })
+function GigsView({ trips = 0, completedCount = 0 }) {
+  const [reserved, setReserved] = useState({ 1: true, 2: false, 3: false, 4: false })
 
   const toggleGig = id => {
     setReserved(r => ({ ...r, [id]: !r[id] }))
   }
 
   const shifts = [
-    { id: 1, title: 'Lunch Peak Shift', time: '12:00 PM – 03:30 PM', bonus: '+₹250 Peak Bonus', area: 'Indiranagar Zone' },
-    { id: 2, title: 'Dinner Peak Shift', time: '07:00 PM – 11:00 PM', bonus: '+₹350 Peak Bonus', area: 'Koramangala Zone' },
-    { id: 3, title: 'Late Night Surge', time: '11:00 PM – 02:00 AM', bonus: '+₹50 Extra / Order', area: 'Central Bengaluru' },
-    { id: 4, title: 'Breakfast Shift (Tomorrow)', time: '08:00 AM – 11:30 AM', bonus: '+₹180 Morning Bonus', area: 'HSR Layout Zone' }
+    { id: 1, title: 'Lunch Peak Shift', time: '12:00 PM – 03:30 PM', bonus: '+₹250 Peak Bonus', area: 'Central Zone' },
+    { id: 2, title: 'Dinner Peak Shift', time: '07:00 PM – 11:00 PM', bonus: '+₹350 Peak Bonus', area: 'South Zone' },
+    { id: 3, title: 'Late Night Surge', time: '11:00 PM – 02:00 AM', bonus: '+₹50 Extra / Order', area: 'High Demand Zone' },
+    { id: 4, title: 'Breakfast Shift (Tomorrow)', time: '08:00 AM – 11:30 AM', bonus: '+₹180 Morning Bonus', area: 'City Center' },
   ]
+
+  const incentiveTarget = 12
+  const progressPercent = Math.min(100, Math.round((completedCount / incentiveTarget) * 100))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="dp-section-title">
         <h2>Gigs &amp; Shift Slots</h2>
-        <span>Indiranagar Zone</span>
+        <span>Active Shifts</span>
       </div>
 
       {/* Incentive Meter */}
@@ -590,14 +786,16 @@ function GigsView() {
             ⚡ Daily Incentive Target
           </span>
           <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 700 }}>
-            8 / 12 Orders Done
+            {completedCount} / {incentiveTarget} Orders Done
           </span>
         </div>
-        <strong style={{ fontSize: 16, fontWeight: 900, color: '#ffffff' }}>
-          Complete 4 more orders for ₹400 Bonus!
+        <strong style={{ fontSize: 15, fontWeight: 900, color: '#ffffff' }}>
+          {completedCount >= incentiveTarget
+            ? '🎉 Daily Incentive Completed! Bonus Unlocked!'
+            : `Complete ${incentiveTarget - completedCount} more orders for ₹400 Bonus!`}
         </strong>
         <div className="dp-incentive-track">
-          <div className="dp-incentive-fill" style={{ width: '66%' }} />
+          <div className="dp-incentive-fill" style={{ width: `${progressPercent}%` }} />
         </div>
       </div>
 
@@ -617,7 +815,7 @@ function GigsView() {
               <span className="dp-gig-bonus">{s.bonus}</span>
             </div>
             <div style={{ fontSize: 11, color: '#78716c' }}>
-              📍 {s.area} • Guaranteed minimum 1.5x surge rate
+              📍 {s.area} • Guaranteed surge rate
             </div>
             <button
               type="button"
@@ -634,13 +832,15 @@ function GigsView() {
 }
 
 /* ── WALLET & EARNINGS VIEW ─────────────────────────────────── */
-function WalletView() {
-  const [balance, setBalance] = useState(2840.50)
+function WalletView({ partner, completed, todayPay }) {
   const [withdrawn, setWithdrawn] = useState(false)
+  const earnings = Number(partner.earnings || 0)
+  const currentBalance = withdrawn ? 0 : earnings
 
   const handleWithdraw = () => {
-    setBalance(0)
-    setWithdrawn(true)
+    if (currentBalance > 0) {
+      setWithdrawn(true)
+    }
   }
 
   return (
@@ -656,100 +856,64 @@ function WalletView() {
           Available Balance
         </span>
         <div className="dp-wallet-amount">
-          ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          ₹{currentBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
         </div>
         <button
           type="button"
           className="dp-withdraw-btn"
-          disabled={balance === 0}
+          disabled={currentBalance === 0}
           onClick={handleWithdraw}
         >
-          {withdrawn ? '✓ Transferred to HDFC Bank (****4829)' : '💸 Instant Payout to Bank →'}
+          {withdrawn ? '✓ Payout Request Submitted' : '💸 Instant Payout to Bank →'}
         </button>
-      </div>
-
-      {/* Linked Bank & Payout Info */}
-      <div className="dp-order-card" style={{ gap: 8 }}>
-        <span className="dp-loc-tag store">Linked Payout Account</span>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <strong style={{ fontSize: 13, display: 'block', color: '#1c1917' }}>HDFC Bank •••• 4829</strong>
-            <span style={{ fontSize: 10, color: '#78716c' }}>UPI ID: rahul@upi</span>
-          </div>
-          <span className="dp-badge-chip">✓ Active Account</span>
-        </div>
       </div>
 
       {/* Earnings Breakdown */}
       <div className="dp-section-title">
-        <h2 style={{ fontSize: 14 }}>Weekly Earnings Breakdown</h2>
+        <h2 style={{ fontSize: 14 }}>Earnings Breakdown</h2>
       </div>
 
       <div className="dp-order-meta-grid">
         <div className="dp-meta-cell">
-          <span>Trip Earnings</span>
-          <strong>₹2,240.00</strong>
+          <span>Today's Pay</span>
+          <strong>₹{todayPay.toFixed(2)}</strong>
         </div>
         <div className="dp-meta-cell">
-          <span>Surge &amp; Bonuses</span>
-          <strong>₹450.00</strong>
+          <span>Completed Trips</span>
+          <strong>{completed.length}</strong>
         </div>
         <div className="dp-meta-cell">
-          <span>Customer Tips</span>
-          <strong>₹150.50</strong>
+          <span>Fee Status</span>
+          <strong style={{ color: '#16a34a' }}>✓ {partner.feeStatus || 'PAID'}</strong>
         </div>
         <div className="dp-meta-cell">
-          <span>Onboarding Fee</span>
-          <strong style={{ color: '#16a34a' }}>✓ Paid ₹499</strong>
+          <span>Rating</span>
+          <strong>★ {partner.rating ? Number(partner.rating).toFixed(1) : '5.0'}</strong>
         </div>
       </div>
 
       {/* Recent Transactions */}
       <div className="dp-section-title">
-        <h2 style={{ fontSize: 14 }}>Recent Transactions</h2>
+        <h2 style={{ fontSize: 14 }}>Recent Completed Deliveries</h2>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {withdrawn && (
-          <div className="dp-tx-item">
-            <div>
-              <strong style={{ display: 'block', fontSize: 12 }}>Instant Withdrawal to HDFC Bank</strong>
-              <span style={{ fontSize: 9.5, color: '#78716c' }}>Just now • Account ****4829</span>
+        {completed.length > 0 ? (
+          completed.slice(0, 5).map(order => (
+            <div key={order.id} className="dp-tx-item">
+              <div>
+                <strong style={{ display: 'block', fontSize: 12 }}>Order #{order.id} Trip Pay</strong>
+                <span style={{ fontSize: 9.5, color: '#78716c' }}>Store: {order.branch}</span>
+              </div>
+              <span className="dp-tx-plus">+₹120.00</span>
             </div>
-            <span className="dp-tx-minus">-₹2,840.50</span>
+          ))
+        ) : (
+          <div style={{ textAlign: 'center', color: '#78716c', padding: '24px 12px' }}>
+            <p style={{ margin: 0, fontSize: 12 }}>No completed trip payouts yet. Complete delivery assignments to earn.</p>
           </div>
         )}
-        <div className="dp-tx-item">
-          <div>
-            <strong style={{ display: 'block', fontSize: 12 }}>Order #BWL10301 Trip Pay</strong>
-            <span style={{ fontSize: 9.5, color: '#78716c' }}>Today 8:15 PM • Base + Surge</span>
-          </div>
-          <span className="dp-tx-plus">+₹120.00</span>
-        </div>
-        <div className="dp-tx-item">
-          <div>
-            <strong style={{ display: 'block', fontSize: 12 }}>Customer Tip (Priya S.)</strong>
-            <span style={{ fontSize: 9.5, color: '#78716c' }}>Today 7:22 PM • Tip Bonus</span>
-          </div>
-          <span className="dp-tx-plus">+₹50.00</span>
-        </div>
-        <div className="dp-tx-item">
-          <div>
-            <strong style={{ display: 'block', fontSize: 12 }}>Dinner Peak Shift Bonus</strong>
-            <span style={{ fontSize: 9.5, color: '#78716c' }}>Today 7:00 PM • Peak Surge</span>
-          </div>
-          <span className="dp-tx-plus">+₹350.00</span>
-        </div>
-        <div className="dp-tx-item">
-          <div>
-            <strong style={{ display: 'block', fontSize: 12 }}>Order #BWL10300 Trip Pay</strong>
-            <span style={{ fontSize: 9.5, color: '#78716c' }}>Today 6:40 PM • Base Pay</span>
-          </div>
-          <span className="dp-tx-plus">+₹85.00</span>
-        </div>
       </div>
     </div>
   )
 }
-
-

@@ -6,6 +6,9 @@ import { logAuditAction } from '../middleware/auditLogger.js';
 
 const router = Router();
 
+router.get('/me', authenticateToken, DeliveryController.getCurrentPartner);
+router.get('/dashboard', authenticateToken, DeliveryController.getCurrentPartner);
+router.get('/partners/me', authenticateToken, DeliveryController.getCurrentPartner);
 router.get('/partners', authenticateToken, authorizeRoles('ADMIN', 'SUPPORT', 'DELIVERY'), DeliveryController.getPartners);
 router.post('/partners', logAuditAction('REGISTER_DELIVERY_PARTNER', 'DeliveryPartner'), DeliveryController.registerPartner);
 router.get('/partners/:id', authenticateToken, DeliveryController.getPartnerProfile);

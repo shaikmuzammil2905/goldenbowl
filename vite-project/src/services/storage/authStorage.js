@@ -73,27 +73,28 @@ export const authStorage = {
 
   // Delivery Auth
   getDeliveryAuth() {
-    const sessionReady = sessionStorage.getItem(KEYS.DELIVERY_AUTH) === '1';
-    let onboardingReady = false;
-    try {
-      const onboarding = JSON.parse(localStorage.getItem(KEYS.DELIVERY_ONBOARDING) || '{}');
-      if (onboarding.verificationStatus === 'VERIFIED') onboardingReady = true;
-    } catch {
-      // Ignore JSON parse error
-    }
-    return sessionReady || onboardingReady;
+    return sessionStorage.getItem(KEYS.DELIVERY_AUTH) === '1' || localStorage.getItem(KEYS.DELIVERY_AUTH) === '1';
   },
   setDeliveryAuth(user = null) {
     sessionStorage.setItem(KEYS.DELIVERY_AUTH, '1');
-    if (user) sessionStorage.setItem(KEYS.DELIVERY_USER, JSON.stringify(user));
+    localStorage.setItem(KEYS.DELIVERY_AUTH, '1');
+    if (user) {
+      const data = JSON.stringify(user);
+      sessionStorage.setItem(KEYS.DELIVERY_USER, data);
+      localStorage.setItem(KEYS.DELIVERY_USER, data);
+    }
   },
   clearDeliveryAuth() {
     sessionStorage.removeItem(KEYS.DELIVERY_AUTH);
     sessionStorage.removeItem(KEYS.DELIVERY_USER);
+    localStorage.removeItem(KEYS.DELIVERY_AUTH);
+    localStorage.removeItem(KEYS.DELIVERY_USER);
+    localStorage.removeItem(KEYS.DELIVERY_ONBOARDING);
+    localStorage.removeItem('bowlDeliveryLocation');
   },
   getDeliveryUser() {
     try {
-      const data = sessionStorage.getItem(KEYS.DELIVERY_USER);
+      const data = sessionStorage.getItem(KEYS.DELIVERY_USER) || localStorage.getItem(KEYS.DELIVERY_USER);
       return data ? JSON.parse(data) : null;
     } catch {
       return null;

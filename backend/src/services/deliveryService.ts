@@ -119,6 +119,119 @@ export class DeliveryService {
     });
   }
 
+  static async getCurrentPartnerDashboard(userId: string) {
+    let partner = await prisma.deliveryPartner.findUnique({
+      where: { userId },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, mobile: true, role: true },
+        },
+        assignedOrders: {
+          include: {
+            items: {
+              include: { product: true },
+            },
+            branch: true,
+            customerUser: {
+              select: { name: true, email: true, mobile: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!partner) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (user) {
+        partner = await prisma.deliveryPartner.create({
+          data: {
+            userId: user.id,
+            name: user.name,
+            mobile: user.mobile || '',
+            vehicle: 'Bike',
+            verificationStatus: 'VERIFIED',
+            documentsVerified: true,
+            feeStatus: 'PAID',
+            trips: 0,
+            earnings: 0.0,
+            rating: 5.0,
+          },
+          include: {
+            user: {
+              select: { id: true, name: true, email: true, mobile: true, role: true },
+            },
+            assignedOrders: {
+              include: {
+                items: {
+                  include: { product: true },
+                },
+                branch: true,
+                customerUser: {
+                  select: { name: true, email: true, mobile: true },
+                },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        });
+      }
+    }
+
+    if (!partner) {
+      throw new NotFoundError('Delivery partner account not found');
+    }
+
+    const assignedOrders = (partner.assignedOrders || []).map((o: any) => ({
+      id: o.id,
+      customer: o.customerName || o.customerUser?.name || 'Customer',
+      customerPhone: o.customerUser?.mobile || '',
+      branch: o.branch?.name || 'Golden Food Bowl',
+      branchAddress: o.branch?.address || '100ft Road, 12th Main, Indiranagar',
+      total: Number(o.totalAmount || 0),
+      status: o.status,
+      orderType: o.orderType || 'Delivery',
+      eta: o.etaMinutes || 25,
+      createdAt: o.createdAt,
+      items: o.items || [],
+    }));
+
+    const activeOrders = assignedOrders.filter(
+      (o: any) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED'
+    );
+    const completedOrders = assignedOrders.filter(
+      (o: any) => o.status === 'DELIVERED'
+    );
+
+    return {
+      partner: {
+        id: partner.id,
+        name: partner.name,
+        email: partner.user?.email || '',
+        mobile: partner.mobile || partner.user?.mobile || '',
+        vehicle: partner.vehicle,
+        verificationStatus: partner.verificationStatus,
+        documentsVerified: partner.documentsVerified,
+        feeStatus: partner.feeStatus,
+        trips: partner.trips,
+        earnings: Number(partner.earnings),
+        rating: partner.rating,
+      },
+      stats: {
+        todayPay: Number(partner.earnings),
+        trips: partner.trips,
+        completedTrips: completedOrders.length,
+        activeTrips: activeOrders.length,
+        onTimeRate: partner.trips > 0 ? 100 : 0,
+        acceptanceRate: partner.trips > 0 ? 100 : 0,
+        rating: partner.rating,
+      },
+      activeOrders,
+      completedOrders,
+      assignedOrders,
+    };
+  }
+
   static async getPartnerById(id: string) {
     return prisma.deliveryPartner.findUnique({
       where: { id },
@@ -127,11 +240,15 @@ export class DeliveryService {
   }
 
   static async updatePartnerProfile(id: string, data: any) {
+    const updateData: any = {};
+    if (data.vehicle !== undefined) updateData.vehicle = data.vehicle;
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.mobile !== undefined) updateData.mobile = data.mobile;
+
     return prisma.deliveryPartner.update({
       where: { id },
-      data: {
-        vehicle: data.vehicle,
-      },
+      data: updateData,
+      include: { user: true },
     });
   }
 }

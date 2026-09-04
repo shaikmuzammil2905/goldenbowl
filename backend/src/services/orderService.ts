@@ -69,6 +69,21 @@ export class OrderService {
     const order = await this.getOrderById(id);
     const updated = await OrderRepository.updateStatus(id, status);
 
+    // If order was delivered and has an assigned driver, increment trips and earnings
+    if (status === 'DELIVERED' && order.driverId) {
+      try {
+        await prisma.deliveryPartner.update({
+          where: { id: order.driverId },
+          data: {
+            trips: { increment: 1 },
+            earnings: { increment: 120.00 },
+          },
+        });
+      } catch (err) {
+        console.error('Failed to update driver earnings/trips:', err);
+      }
+    }
+
     // Notify Customer
     if (order.customerId) {
       await prisma.notification.create({

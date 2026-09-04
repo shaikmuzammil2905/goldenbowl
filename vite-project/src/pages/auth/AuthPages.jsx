@@ -1001,6 +1001,13 @@ export function DeliverySignUpPage() {
         },
       });
       if (res.success) {
+        localStorage.setItem('bowlDeliveryOnboarding', JSON.stringify({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          mobile: mobile.trim(),
+          vehicle,
+          partnerId: res.data?.id
+        }));
         n('/delivery/verification');
       } else {
         setError(res.message || 'Registration failed. Please check details.');
@@ -1017,7 +1024,7 @@ export function DeliverySignUpPage() {
       <h2>Join Bowl Delivery Team</h2>
       <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 16px' }}>Earn up to ₹35,000/month delivering fresh food bowls.</p>
       <form onSubmit={submit} className="clean-form">
-        <TextField icon={UserRound} label="Full Name" value={name} onChange={(e) => { setName(e.target.value); setError(''); }} placeholder="e.g. Rahul Kumar" required />
+        <TextField icon={UserRound} label="Full Name" value={name} onChange={(e) => { setName(e.target.value); setError(''); }} placeholder="Enter full name" required />
         <TextField icon={Mail} label="Email Address" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} placeholder="name@example.com" required />
         <TextField icon={Phone} label="Mobile Number" value={mobile} onChange={(e) => { setMobile(e.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }} placeholder="10-digit mobile number" inputMode="numeric" required />
         
@@ -1115,11 +1122,12 @@ export function DeliveryFeePage() {
       return;
     }
     setLoading(true);
+    const onboarding = JSON.parse(localStorage.getItem('bowlDeliveryOnboarding') || '{}');
     openRazorpayCheckout({
       amount: currentFee,
       description: `Delivery Partner Kit & Onboarding Fee (₹${currentFee})`,
-      customerName: 'Rahul Kumar',
-      customerPhone: '9876543210',
+      customerName: onboarding.name || 'Delivery Partner',
+      customerPhone: onboarding.mobile || '9999999999',
       notes: { purpose: 'Delivery Partner Onboarding Kit & Verification', fee: currentFee },
       onSuccess: (paymentData) => {
         setLoading(false);
@@ -1247,8 +1255,8 @@ export function DeliveryApplicationSubmittedPage() {
         <p style={{ fontSize: 12, color: '#64748b', margin: '8px 0 20px' }}>
           Your delivery partner application is currently under verification by Golden Bowl Admin.
         </p>
-        <button type="button" className="auth-primary gold-btn" onClick={() => { authStorage.setDeliveryAuth({ role: 'delivery' }); n('/delivery/orders'); }}>
-          Go to Partner App →
+        <button type="button" className="auth-primary gold-btn" onClick={() => n('/delivery/signin')}>
+          Go to Delivery Partner Login →
         </button>
       </div>
     </DeliveryFrame>
