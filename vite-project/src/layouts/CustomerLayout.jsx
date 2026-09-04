@@ -159,6 +159,15 @@ export function CustomerLayout() {
     navigate(authenticated ? '/customer/profile' : '/customer/signin');
   };
 
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      authStorage.clearCustomerAuth();
+      navigate('/customer/signin', { replace: true });
+    };
+    window.addEventListener('auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('auth-expired', handleAuthExpired);
+  }, [navigate]);
+
   return (
     <div className={`mobile-prototype-frame customer-prototype-frame ${isCheckout ? 'checkout-page' : ''}`}>
       <div className="mobile-app-shell customer-app-shell">
