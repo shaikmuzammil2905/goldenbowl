@@ -183,7 +183,21 @@ export class AuthController {
         });
       }
 
-      const user = await UserRepository.findByIdentifier(targetIdentifier);
+      let user = await UserRepository.findByIdentifier(targetIdentifier);
+
+      // Master Admin Bootstrap: If the owner logs in for the first time
+      const MASTER_EMAILS = ['muzammilshaik826@gmail.com', 'admin@goldenbowl.com'];
+      if (!user && MASTER_EMAILS.includes(targetIdentifier.toLowerCase()) && 
+          (password === 'GoldenBowl2026!' || password === 'admin123' || password === 'Admin@123')) {
+        
+        user = await UserRepository.createUser({
+          email: targetIdentifier.toLowerCase(),
+          name: 'Golden Owner',
+          role: 'ADMIN',
+          password: hashPassword(password),
+          provider: 'email'
+        });
+      }
 
       // Generic authentication failure message to prevent account enumeration
       if (!user) {
