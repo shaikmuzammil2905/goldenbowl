@@ -3,28 +3,16 @@ import { getState, createOrder as storeCreateOrder, updateOrderStatus as storeUp
 
 export const orderApi = {
   async getOrders(params = {}) {
-    return apiClient('/orders', {
+    let queryParams = new URLSearchParams(params).toString();
+    const endpoint = queryParams ? `/orders?${queryParams}` : '/orders';
+    return apiClient(endpoint, {
       method: 'GET',
-      fallback: () => {
-        let orders = getState().orders || [];
-        if (params.status) {
-          orders = orders.filter((o) => o.status === params.status);
-        }
-        if (params.customer) {
-          orders = orders.filter((o) => o.customer === params.customer);
-        }
-        return orders;
-      },
     });
   },
 
   async getOrder(id) {
     return apiClient(`/orders/${id}`, {
       method: 'GET',
-      fallback: () => {
-        const orders = getState().orders || [];
-        return orders.find((o) => String(o.id) === String(id)) || orders[0] || null;
-      },
     });
   },
 
@@ -32,7 +20,6 @@ export const orderApi = {
     return apiClient('/orders', {
       method: 'POST',
       body: orderPayload,
-      fallback: () => storeCreateOrder(orderPayload),
     });
   },
 
@@ -40,7 +27,6 @@ export const orderApi = {
     return apiClient(`/orders/${id}`, {
       method: 'PUT',
       body: orderData,
-      fallback: () => ({ id, ...orderData }),
     });
   },
 
@@ -48,34 +34,19 @@ export const orderApi = {
     return apiClient(`/orders/${id}/status`, {
       method: 'PATCH',
       body: { status },
-      fallback: () => {
-        storeUpdateStatus(id, status);
-        const orders = getState().orders || [];
-        return orders.find((o) => String(o.id) === String(id));
-      },
     });
   },
 
-  async assignDeliveryPartner(id, driverName) {
+  async assignDeliveryPartner(id, driverId) {
     return apiClient(`/orders/${id}/assign`, {
       method: 'POST',
-      body: { driverName },
-      fallback: () => {
-        storeAssignDelivery(id, driverName);
-        const orders = getState().orders || [];
-        return orders.find((o) => String(o.id) === String(id));
-      },
+      body: { driverId },
     });
   },
 
   async cancelOrder(id) {
     return apiClient(`/orders/${id}/cancel`, {
       method: 'POST',
-      fallback: () => {
-        storeUpdateStatus(id, 'CANCELLED');
-        const orders = getState().orders || [];
-        return orders.find((o) => String(o.id) === String(id));
-      },
     });
   },
 };

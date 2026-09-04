@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { apiClient } from '../../services/api/apiClient'
 import { Bell, CheckCircle2, Truck, AlertTriangle, Check } from 'lucide-react'
 
 const roleLabels = {
@@ -8,17 +9,46 @@ const roleLabels = {
   delivery: 'Delivery Partner Dispatch Alerts'
 }
 
-export function NotificationPanel({ notifications = [], role = 'customer' }) {
+export function NotificationPanel({ notifications: propNotifications = [], role = 'customer' }) {
   const [filter, setFilter] = useState('ALL')
   const [readIds, setReadIds] = useState(new Set())
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(false)
 
-  const items = notifications.filter(item => item.role === role)
+  useEffect(() => {
+    // If not using API or passing mock notifications from context, we just use props
+    // But let's always fetch from API
+    const fetchNotifications = async () => {
+      setLoading(true)
+      try {
+        const res = await apiClient(`/notifications`)
+        if (res.success && Array.isArray(res.data)) {
+          setItems(res.data)
+          setReadIds(new Set(res.data.filter(n => n.read).map(n => n.id)))
+        }
+      } catch (err) {
+        console.error('Failed to fetch notifications:', err)
+        // Fallback to props
+        setItems(propNotifications.filter(item => item.role.toLowerCase() === role.toLowerCase()))
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchNotifications()
+  }, [role, propNotifications])
+
   const filteredItems = items.filter(item => {
     if (filter === 'UNREAD') return !readIds.has(item.id)
     return true
   })
 
-  const markAllRead = () => {
+  const markAllRead = async () => {
+    const unread = items.filter(i => !readIds.has(i.id))
+    for (const item of unread) {
+      try {
+        await apiClient(`/notifications/${item.id}/read`, { method: 'PUT' })
+      } catch (err) {}
+    }
     setReadIds(new Set(items.map(i => i.id)))
   }
 
@@ -116,8 +146,8 @@ export function NotificationPanel({ notifications = [], role = 'customer' }) {
           }}
         >
           <Bell size={40} style={{ color: '#cbd5e1' }} />
-          <strong style={{ fontSize: 16, color: '#1c1917' }}>No new notifications</strong>
-          <span style={{ fontSize: 12, color: '#78716c' }}>You are completely caught up!</span>
+          <strong style={{ fontSize: 16, color: '#1c1917' }}>{loading ? 'Loading...' : 'No new notifications'}</strong>
+          <span style={{ fontSize: 12, color: '#78716c' }}>{loading ? 'Please wait' : 'You are completely caught up!'}</span>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -143,14 +173,14 @@ export function NotificationPanel({ notifications = [], role = 'customer' }) {
                     width: 36,
                     height: 36,
                     borderRadius: 10,
-                    background: item.role === 'delivery' ? '#ffedd5' : item.title.includes('Surge') ? '#fee2e2' : '#f0fdf4',
-                    color: item.role === 'delivery' ? '#c2410c' : item.title.includes('Surge') ? '#dc2626' : '#166534',
+                    background: item.role.toLowerCase() === 'delivery' ? '#ffedd5' : item.title.includes('Surge') ? '#fee2e2' : '#f0fdf4',
+                    color: item.role.toLowerCase() === 'delivery' ? '#c2410c' : item.title.includes('Surge') ? '#dc2626' : '#166534',
                     display: 'grid',
                     placeItems: 'center',
                     flexShrink: 0
                   }}
                 >
-                  {item.role === 'delivery' ? (
+                  {item.role.toLowerCase() === 'delivery' ? (
                     <Truck size={18} />
                   ) : item.title.includes('Surge') ? (
                     <AlertTriangle size={18} />

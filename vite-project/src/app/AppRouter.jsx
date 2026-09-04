@@ -45,6 +45,8 @@ import {
   DeliveryVerificationPage,
   DeliveryFeePage,
   DeliveryApplicationSubmittedPage,
+  DeliveryForgotPasswordPage,
+  DeliveryResetPasswordPage,
 } from '../pages/auth/AuthPages';
 import { DeliveryPartnerSignInPage } from '../pages/auth/DeliveryPartnerSignInPage';
 import { DeliveryLocationPage } from '../pages/auth/DeliveryLocationPage';
@@ -121,6 +123,8 @@ export function AppRouter() {
       <Route path="/delivery/onboarding" element={<Navigate to="/delivery/signup" replace />} />
       <Route path="/delivery/signin" element={<DeliveryPartnerSignInPage />} />
       <Route path="/delivery/signup" element={<DeliverySignUpPage />} />
+      <Route path="/delivery/forgot-password" element={<DeliveryForgotPasswordPage />} />
+      <Route path="/delivery/reset-password" element={<DeliveryResetPasswordPage />} />
       <Route path="/delivery/verification" element={<DeliveryVerificationPage />} />
       <Route path="/delivery/onboarding-fee" element={<DeliveryLocationPage />} />
       <Route path="/delivery/onboarding-fee/payment" element={<DeliveryFeePage />} />

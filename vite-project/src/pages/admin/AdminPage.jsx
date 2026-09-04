@@ -51,15 +51,49 @@ import {
 } from '../../services/prototypeStore'
 import { NotificationPanel } from '../../components/notifications/NotificationPanel'
 import { AdminReports } from './AdminReports'
+import { Branches } from './Branches'
+import { orderApi } from '../../services/api/orderApi'
 import './admin-content.css'
 
 export function AdminPage() {
   const { pathname } = useLocation()
   const path = pathname.replace('/admin/', '') || 'dashboard'
+  
+  const [liveOrders, setLiveOrders] = useState([])
+  const [loadingOrders, setLoadingOrders] = useState(true)
+
+  useEffect(() => {
+    fetchOrders()
+    const interval = setInterval(fetchOrders, 10000) // Poll every 10 seconds
+    return () => clearInterval(interval)
+  }, [])
+
+  const fetchOrders = async () => {
+    try {
+      const res = await orderApi.getOrders()
+      const fetched = res.data || res || []
+      // Map API response to match UI fields
+      const mapped = fetched.map(o => ({
+        id: o.id,
+        customer: o.customerName || (o.customerUser ? o.customerUser.name : 'Guest'),
+        branch: o.branch?.name || '-',
+        total: o.totalAmount,
+        status: o.status,
+        createdAt: o.createdAt,
+        items: o.items || []
+      }))
+      setLiveOrders(mapped)
+    } catch (err) {
+      console.error('Failed to fetch live orders:', err)
+    } finally {
+      setLoadingOrders(false)
+    }
+  }
+
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {path === 'dashboard' && <Dashboard />}
-      {path === 'orders' && <Orders />}
+      {path === 'dashboard' && <Dashboard orders={liveOrders} loading={loadingOrders} />}
+      {path === 'orders' && <Orders orders={liveOrders} loading={loadingOrders} fetchOrders={fetchOrders} />}
       {path === 'products' && <Products />}
       {path === 'categories' && <Categories />}
       {path === 'branches' && <Branches />}
@@ -72,8 +106,7 @@ export function AdminPage() {
   )
 }
 
-function Dashboard() {
-  const { orders } = usePrototypeContext()
+function Dashboard({ orders, loading }) {
   const sales = orders.reduce((s, o) => s + Number(o.total || 0), 0)
   const activeOrdersCount = orders.filter(o => o.status !== 'DELIVERED').length
   return (
@@ -111,13 +144,12 @@ function Dashboard() {
           <div style={{ height: 8, background: 'rgba(255,255,255,0.2)', borderRadius: 10, overflow: 'hidden' }}><div style={{ width: '83%', height: '100%', background: 'linear-gradient(90deg, #dfa500, #f5c518)', borderRadius: 10 }} /></div>
         </div>
       </div>
-      <Orders />
+      <Orders orders={orders} fetchOrders={() => {}} />
     </>
   )
 }
 
-function Orders() {
-  const { orders } = usePrototypeContext()
+function Orders({ orders = [], loading = false, fetchOrders }) {
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [datePreset, setDatePreset] = useState('ALL')
@@ -293,7 +325,14 @@ function Orders() {
                         {o.status === 'CANCELLED' ? (
                           <span style={{ fontSize: 10, color: '#b91c1c', fontWeight: 700 }}>Cancelled</span>
                         ) : o.status !== 'DELIVERED' ? (
-                          <button className="admin-action-btn" onClick={() => o.status === 'READY_FOR_PICKUP' ? assignDelivery(o.id, 'Rahul Kumar') : updateOrderStatus(o.id, nextStatus(o.status))}>
+                          <button className="admin-action-btn" onClick={async () => {
+                            if (o.status === 'READY_FOR_PICKUP') {
+                              await orderApi.assignDeliveryPartner(o.id, 'driver-id-placeholder');
+                            } else {
+                              await orderApi.updateOrderStatus(o.id, nextStatus(o.status));
+                            }
+                            if (fetchOrders) fetchOrders();
+                          }}>
                             {o.status === 'READY_FOR_PICKUP' ? 'Assign Delivery →' : 'Advance →'}
                           </button>
                         ) : (
@@ -781,8 +820,6 @@ function Categories() {
 
 
 function nextStatus(status) { const flow = { CONFIRMED: 'PREPARING', PREPARING: 'READY_FOR_PICKUP', READY_FOR_PICKUP: 'ASSIGNED', ASSIGNED: 'PICKED_UP', PICKED_UP: 'OUT_FOR_DELIVERY', OUT_FOR_DELIVERY: 'DELIVERED' }; return flow[status] }
-
-function Branches() { const { branches } = usePrototypeContext(); return <section className="admin-table-card"><div className="table-heading"><h2><Store size={18} style={{ color: '#b4811d' }} /> Restaurant Branches</h2></div><div style={{ overflowX: 'auto' }}><table><thead><tr><th>Branch</th><th>Area</th><th>Distance</th><th>Status</th></tr></thead><tbody>{branches.map(b => <tr key={b.id}><td><strong>{b.name}</strong></td><td>{b.area}</td><td>{b.distance}</td><td>Open</td></tr>)}</tbody></table></div></section> }
 function Customers() { return <section className="admin-table-card"><div className="table-heading"><h2><Users size={18} style={{ color: '#b4811d' }} /> Customer Base</h2></div><p style={{ padding: 16, margin: 0, color: '#78716c' }}>Customer records will appear here.</p></section> }
 function Delivery() {
   const { deliveryPartners = [], deliverySettings = {} } = usePrototypeContext()

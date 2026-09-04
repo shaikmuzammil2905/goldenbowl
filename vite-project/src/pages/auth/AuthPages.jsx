@@ -2,8 +2,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Phone, UserRound, ShieldCheck, Car, FileText, Loader2, Eye, EyeOff, Lock, ArrowLeft } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
-import { registerCustomer, registerDeliveryPartner } from '../../services/prototypeStore';
 import { usePrototypeContext } from '../../context/PrototypeContext';
+import { apiClient } from '../../services/api/apiClient';
 import { authStorage } from '../../services/storage/authStorage';
 import { MobileStatusBar } from '../../layouts/CustomerLayout';
 import { openRazorpayCheckout } from '../../services/razorpay';
@@ -953,12 +953,41 @@ export function DeliverySignUpPage() {
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [vehicle, setVehicle] = useState('Bike');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (name.trim() && /^\d{10}$/.test(mobile)) {
-      registerDeliveryPartner({ name: name.trim(), mobile, vehicle });
-      n('/delivery/verification');
+    if (!name.trim() || !/^\d{10}$/.test(mobile)) return;
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    
+    try {
+      const res = await apiClient('/delivery/partners', {
+        method: 'POST',
+        body: { name: name.trim(), mobile, vehicle, password },
+      });
+      if (res.success) {
+        n('/delivery/verification');
+      } else {
+        setError(res.message || 'Registration failed.');
+      }
+    } catch (err) {
+      setError(err.message || 'Network error.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -977,8 +1006,41 @@ export function DeliverySignUpPage() {
             <option value="Electric Vehicle">Electric EV Scooter</option>
           </select>
         </label>
-        <button type="submit" className="auth-primary gold-btn" disabled={!name.trim() || !/^\d{10}$/.test(mobile)}>
-          Continue to Verification →
+        
+        <label className="clean-field">
+          <span className="field-label"><Lock size={15} /> Create Password</span>
+          <div className="csi-password-field">
+            <input
+              className="csi-password-input"
+              type={showPw ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(''); }}
+              placeholder="Minimum 6 characters"
+              required
+            />
+            <button type="button" className="csi-pw-toggle" onClick={() => setShowPw(!showPw)} tabIndex={-1}>
+              {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </label>
+        <label className="clean-field">
+          <span className="field-label"><Lock size={15} /> Confirm Password</span>
+          <div className="csi-password-field">
+            <input
+              className="csi-password-input"
+              type={showPw ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+              placeholder="Re-enter password"
+              required
+            />
+          </div>
+        </label>
+
+        <ErrorBox msg={error} />
+
+        <button type="submit" className="auth-primary gold-btn" disabled={!name.trim() || !/^\d{10}$/.test(mobile) || loading}>
+          {loading ? <><Loader2 size={16} className="animate-spin" /> Processing...</> : 'Continue to Verification →'}
         </button>
       </form>
       <p className="auth-switch-text">Already a partner? <Link to="/delivery/signin">Sign In</Link></p>
@@ -1166,6 +1228,174 @@ export function DeliveryApplicationSubmittedPage() {
           Go to Partner App →
         </button>
       </div>
+    </DeliveryFrame>
+  );
+}
+
+// ── 7. DELIVERY FORGOT PASSWORD ───────────────────────────────────────────────
+export function DeliveryForgotPasswordPage() {
+  const n = useNavigate();
+  const [identifier, setIdentifier] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  return (
+    <DeliveryFrame step={1} totalSteps={1} stepLabel="Account Recovery">
+      <h2>Reset Password</h2>
+      <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 16px' }}>Enter your registered mobile number to receive recovery instructions.</p>
+      {!submitted ? (
+        <form onSubmit={async (e) => { 
+          e.preventDefault(); 
+          setLoading(true); 
+          setError(''); 
+          try { 
+            authStorage.clearDeliveryAuth();
+            await apiClient('/auth/request-reset', { method: 'POST', body: { identifier } }); 
+            setSubmitted(true); 
+          } catch (err) { 
+            console.error(err); 
+            setError('Failed to send reset link. Please try again.'); 
+          } finally { 
+            setLoading(false); 
+          } 
+        }} className="clean-form">
+          <TextField
+            icon={Phone}
+            label="Mobile Number"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+            placeholder="Registered mobile number"
+            required
+          />
+          <button type="submit" className="auth-primary gold-btn" disabled={!identifier.trim() || loading}>
+            {loading ? <Loader2 size={16} className="animate-spin" /> : 'Send Password Reset Link →'}
+          </button>
+          {error && <p style={{ color: '#b91c1c', marginTop: 8 }}>{error}</p>}
+          <p className="auth-switch-text"><Link to="/delivery/signin">Back to Sign In</Link></p>
+        </form>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '12px 0' }}>
+          <p style={{ fontSize: 13, color: '#166534', background: '#f0fdf4', padding: '12px', borderRadius: 10, border: '1px solid #bbf7d0' }}>
+            ✓ If an account exists for <strong>{identifier}</strong>, recovery instructions have been sent.
+          </p>
+          <button type="button" className="auth-primary gold-btn" onClick={() => n('/delivery/signin')} style={{ marginTop: 12 }}>
+            Return to Sign In
+          </button>
+        </div>
+      )}
+    </DeliveryFrame>
+  );
+}
+
+export function DeliveryResetPasswordPage() {
+  const n = useNavigate();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+
+    try {
+      const res = await apiClient('/auth/reset-password', {
+        method: 'POST',
+        body: { token, password }
+      });
+      
+      if (res.success) {
+        setSuccess(true);
+      } else {
+        setError(res.message || 'Failed to reset password. The link might be expired.');
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!token) {
+    return (
+      <DeliveryFrame step={1} totalSteps={1} stepLabel="Error">
+        <h2>Invalid Link</h2>
+        <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 16px' }}>This password reset link is invalid or missing a token.</p>
+        <button type="button" className="auth-primary gold-btn" onClick={() => n('/delivery/forgot-password')}>
+          Request a new link
+        </button>
+      </DeliveryFrame>
+    );
+  }
+
+  return (
+    <DeliveryFrame step={1} totalSteps={1} stepLabel="Account Recovery">
+      <h2>Create New Password</h2>
+      <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 16px' }}>Please enter your new password below.</p>
+      
+      {success ? (
+        <div style={{ textAlign: 'center', padding: '12px 0' }}>
+          <p style={{ fontSize: 13, color: '#166534', background: '#f0fdf4', padding: '12px', borderRadius: 10, border: '1px solid #bbf7d0' }}>
+            ✓ Your password has been successfully reset!
+          </p>
+          <button type="button" className="auth-primary gold-btn" onClick={() => n('/delivery/signin')} style={{ marginTop: 12 }}>
+            Sign In Now
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="clean-form">
+          <label className="clean-field">
+            <span className="field-label"><Lock size={15} /> New Password</span>
+            <div className="csi-password-field">
+              <input
+                className="csi-password-input"
+                type={showPw ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                placeholder="Minimum 6 characters"
+                required
+              />
+              <button type="button" className="csi-pw-toggle" onClick={() => setShowPw(!showPw)} tabIndex={-1}>
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </label>
+          
+          <label className="clean-field">
+            <span className="field-label"><Lock size={15} /> Confirm Password</span>
+            <div className="csi-password-field">
+              <input
+                className="csi-password-input"
+                type={showPw ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                placeholder="Re-enter new password"
+                required
+              />
+            </div>
+          </label>
+
+          <ErrorBox msg={error} />
+
+          <button type="submit" className="auth-primary gold-btn" disabled={!password || !confirmPassword || loading}>
+            {loading ? <Loader2 size={16} className="animate-spin" /> : 'Reset Password'}
+          </button>
+        </form>
+      )}
     </DeliveryFrame>
   );
 }

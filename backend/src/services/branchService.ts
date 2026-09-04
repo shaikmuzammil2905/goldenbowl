@@ -37,4 +37,18 @@ export class BranchService {
 
     return newBranch;
   }
+  static async updateBranch(id: number, data: { name?: string; area?: string; distance?: string; open?: boolean }) {
+    await this.getBranchById(id); // Ensure branch exists
+    return prisma.branch.update({
+      where: { id },
+      data,
+    });
+  }
+
+  static async deleteBranch(id: number) {
+    await this.getBranchById(id); // Ensure branch exists
+    return prisma.branch.delete({
+      where: { id },
+    });
+  }
 }

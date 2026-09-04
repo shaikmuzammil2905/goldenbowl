@@ -10,7 +10,10 @@ const LOGO = 'https://res.cloudinary.com/dwmjz9csc/image/upload/v1787120716/imag
 
 export function DeliveryPartnerSignInPage() {
   const navigate = useNavigate();
+  const [mode, setMode] = useState('password'); // 'password' | 'otp'
   const [mobile, setMobile] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [otp, setOtp] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -74,6 +77,32 @@ export function DeliveryPartnerSignInPage() {
     setLoading(false);
   };
 
+  const handlePasswordLogin = async (e) => {
+    e.preventDefault();
+    if (!valid || !password) return;
+    setError('');
+    setLoading(true);
+    try {
+      const data = await apiClient('/auth/login', {
+        method: 'POST',
+        body: { identifier: mobile.trim(), password },
+      });
+      if (data.success && data.user) {
+        authStorage.setDeliveryAuth({ 
+          mobile: mobile.trim(), 
+          role: data.user.role || 'delivery',
+          token: data.token || data.accessToken
+        });
+        navigate('/delivery/dashboard');
+      } else {
+        setError(data.message || 'Invalid login credentials. Please try again.');
+      }
+    } catch (err) {
+      setError(err.message || 'Login failed. Please check your connection.');
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="mobile-prototype-frame">
       <div className="mobile-app-shell">
@@ -97,7 +126,77 @@ export function DeliveryPartnerSignInPage() {
                 : 'Sign in with your registered mobile number.'}
             </p>
 
-            {!sent ? (
+            <div className="csi-tabs">
+              <button
+                type="button"
+                className={`csi-tab${mode === 'password' ? ' csi-tab-active' : ''}`}
+                onClick={() => setMode('password')}
+              >
+                🔐 Password
+              </button>
+              <button
+                type="button"
+                className={`csi-tab${mode === 'otp' ? ' csi-tab-active' : ''}`}
+                onClick={() => setMode('otp')}
+              >
+                ✉️ OTP
+              </button>
+            </div>
+
+            {mode === 'password' ? (
+              <form className="clean-form" onSubmit={handlePasswordLogin}>
+                <label className="clean-field">
+                  <span className="field-label"><Phone size={15} /> Mobile Number</span>
+                  <div className="csi-mobile-field">
+                    <span className="csi-prefix">🇮🇳 +91</span>
+                    <input
+                      className="csi-mobile-input"
+                      value={mobile}
+                      onChange={(e) => { setMobile(e.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }}
+                      placeholder="10-digit mobile number"
+                      inputMode="numeric"
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="clean-field">
+                  <span className="field-label">Password</span>
+                  <div className="csi-password-field">
+                    <input
+                      className="csi-password-input"
+                      type={showPw ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                      placeholder="Enter your password"
+                      required
+                    />
+                    <button type="button" className="csi-pw-toggle" onClick={() => setShowPw(!showPw)} tabIndex={-1}>
+                      {showPw ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </label>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '-4px 0 2px' }}>
+                  <Link to="/delivery/forgot-password" className="csi-forgot">Forgot password?</Link>
+                </div>
+
+                {error && (
+                  <p style={{ color: '#dc2626', fontSize: 12, margin: '-4px 0 6px', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
+                    ⚠️ {error}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  className="auth-primary gold-btn"
+                  disabled={!valid || !password || loading}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                >
+                  {loading ? <><Loader2 size={16} className="animate-spin" /> Logging in...</> : <>Login →</>}
+                </button>
+              </form>
+            ) : !sent ? (
               <form className="clean-form" onSubmit={handleSendOtp}>
                 <label className="clean-field">
                   <span className="field-label"><Phone size={15} /> Mobile Number</span>

@@ -59,4 +59,23 @@ export class AdminController {
       next(error);
     }
   }
+  static async updateBranch(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      const branch = await BranchService.updateBranch(id, req.body);
+      res.status(200).json({ success: true, message: 'Branch updated', data: branch });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteBranch(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      await BranchService.deleteBranch(id);
+      res.status(200).json({ success: true, message: 'Branch deleted' });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

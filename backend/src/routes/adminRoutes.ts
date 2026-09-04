@@ -11,4 +11,7 @@ router.get('/branches', AdminController.getBranches);
 router.post('/branches', authenticateToken, authorizeRoles('ADMIN'), logAuditAction('CREATE_BRANCH', 'Branch'), AdminController.createBranch);
 router.post('/branches/:id/duplicate', authenticateToken, authorizeRoles('ADMIN'), logAuditAction('DUPLICATE_BRANCH_MENU', 'Branch'), AdminController.duplicateBranchMenu);
 
+router.put('/branches/:id', authenticateToken, authorizeRoles('ADMIN'), logAuditAction('UPDATE_BRANCH', 'Branch'), AdminController.updateBranch);
+router.delete('/branches/:id', authenticateToken, authorizeRoles('ADMIN'), logAuditAction('DELETE_BRANCH', 'Branch'), AdminController.deleteBranch);
+
 export default router;
