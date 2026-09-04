@@ -16,18 +16,24 @@ export function DeliveryPartnerSignInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const cleanInput = email.trim();
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanInput);
+  const digits = cleanInput.replace(/\D/g, '');
+  const isPhone = digits.length === 10;
+  const isValidIdentifier = isEmail || isPhone;
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!validEmail || !password) return;
+    if (!isValidIdentifier || !password) return;
     setError('');
     setLoading(true);
+
+    const identifier = isEmail ? cleanInput.toLowerCase() : digits.slice(-10);
 
     try {
       const data = await apiClient('/auth/login', {
         method: 'POST',
-        body: { identifier: email.trim().toLowerCase(), password },
+        body: { identifier, password },
       });
 
       if (data.success && data.user) {
@@ -38,11 +44,12 @@ export function DeliveryPartnerSignInPage() {
           email: data.user.email,
           mobile: data.user.mobile || '',
           role: data.user.role || 'delivery',
+          partnerId: data.user.partnerId || '',
           token: data.token || data.accessToken,
         });
         navigate('/delivery/dashboard');
       } else {
-        setError(data.message || 'Invalid email or password. Please try again.');
+        setError(data.message || 'Invalid email/phone or password. Please try again.');
       }
     } catch (err) {
       setError(err.message || 'Login failed. Please check your connection.');
@@ -69,19 +76,19 @@ export function DeliveryPartnerSignInPage() {
 
             <h1 className="auth-title-clean">Delivery Partner Login</h1>
             <p className="auth-desc">
-              Sign in with your registered email and password to access your delivery dashboard.
+              Sign in with your registered email or phone and password to access your delivery dashboard.
             </p>
 
             <form className="clean-form" onSubmit={handleLogin}>
               <label className="clean-field">
-                <span className="field-label"><Mail size={15} /> Email Address</span>
+                <span className="field-label"><Mail size={15} /> Email Address or Mobile</span>
                 <div className="csi-field-box" style={{ position: 'relative' }}>
                   <input
                     className="csi-input"
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                    placeholder="name@example.com"
+                    placeholder="name@example.com or 10-digit mobile"
                     autoCapitalize="none"
                     autoCorrect="off"
                     style={{
@@ -144,7 +151,7 @@ export function DeliveryPartnerSignInPage() {
               <button
                 type="submit"
                 className="auth-primary gold-btn"
-                disabled={!validEmail || !password || loading}
+                disabled={!isValidIdentifier || !password || loading}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 }}
               >
                 {loading ? <><Loader2 size={16} className="animate-spin" /> Signing In...</> : <>Sign In →</>}

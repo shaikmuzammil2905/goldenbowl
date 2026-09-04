@@ -19,12 +19,7 @@ function hashOtp(identifier: string, rawOtp: string): string {
   return crypto.createHmac('sha256', OTP_SECRET).update(`${identifier.trim().toLowerCase()}:${rawOtp.trim()}`).digest('hex');
 }
 
-/**
- * Secure password hashing using PBKDF2 with SHA-512 and salt.
- */
-function hashPassword(password: string): string {
-  return crypto.pbkdf2Sync(password, PASSWORD_SALT, 10000, 64, 'sha512').toString('hex');
-}
+import { normalizeEmail, normalizePhone, hashPassword, verifyPassword } from '../utils/authUtils.js';
 
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
@@ -37,9 +32,9 @@ export interface TokenPair {
 /**
  * Generates an access token and refresh token pair.
  */
-export function generateTokens(user: { id: string; role: string; email?: string }): TokenPair {
+export function generateTokens(user: { id: string; role: string; email?: string; partnerId?: string }): TokenPair {
   const accessToken = jwt.sign(
-    { id: user.id, role: user.role, email: user.email, type: 'access' },
+    { id: user.id, role: user.role, email: user.email, partnerId: user.partnerId, type: 'access' },
     env.JWT_SECRET,
     { expiresIn: '2h' }
   );
@@ -138,7 +133,7 @@ export class AuthController {
 
       // 5. Create User
       const finalEmail = cleanEmail || `${cleanMobile}@goldenbowl.in`;
-      const hashedPassword = hashPassword(password);
+      const hashedPassword = await hashPassword(password);
 
       const user = await UserRepository.createUser({
         name: name.trim(),
@@ -174,7 +169,7 @@ export class AuthController {
   static async login(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { identifier, email, mobile, password, role = 'CUSTOMER' } = req.body;
-      const targetIdentifier = (identifier || email || mobile || '').toString().trim();
+      const targetIdentifier = String(identifier || email || mobile || '').trim();
 
       if (!targetIdentifier || !password) {
         return res.status(400).json({
@@ -185,20 +180,6 @@ export class AuthController {
 
       let user = await UserRepository.findByIdentifier(targetIdentifier);
 
-      // Master Admin Bootstrap: If the owner logs in for the first time
-      const MASTER_EMAILS = ['muzammilshaik826@gmail.com', 'admin@goldenbowl.com'];
-      if (!user && MASTER_EMAILS.includes(targetIdentifier.toLowerCase()) && 
-          (password === 'GoldenBowl2026!' || password === 'admin123' || password === 'Admin@123')) {
-        
-        user = await UserRepository.createUser({
-          email: targetIdentifier.toLowerCase(),
-          name: 'Golden Owner',
-          role: 'ADMIN',
-          password: hashPassword(password),
-          provider: 'email'
-        });
-      }
-
       // Generic authentication failure message to prevent account enumeration
       if (!user) {
         return res.status(401).json({
@@ -207,30 +188,14 @@ export class AuthController {
         });
       }
 
-      const hashedInput = hashPassword(password);
-      // Fallback check for legacy SHA256 hashed passwords
-      const legacyHashed = crypto.createHash('sha256').update(`${PASSWORD_SALT}:${password}`).digest('hex');
-
-      let isMatch = false;
-
       if (!user.password) {
-        // Special bootstrap for master accounts (ADMIN, SUPPORT, DELIVERY) with default password
-        if ((user.role === 'ADMIN' || user.role === 'SUPPORT' || user.role === 'DELIVERY') &&
-            (password === 'GoldenBowl2026!' || password === 'admin123' || password === 'Admin@123')) {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { password: hashedInput },
-          });
-          isMatch = true;
-        } else {
-          return res.status(401).json({
-            success: false,
-            message: 'No password set for this account. Please sign in using OTP or reset your password.',
-          });
-        }
-      } else {
-        isMatch = user.password === hashedInput || user.password === legacyHashed;
+        return res.status(401).json({
+          success: false,
+          message: 'No password set for this account. Please sign in using OTP or reset your password.',
+        });
       }
+
+      const { valid: isMatch, needsRehash } = await verifyPassword(password, user.password);
 
       if (!isMatch) {
         return res.status(401).json({
@@ -239,7 +204,59 @@ export class AuthController {
         });
       }
 
-      const tokens = generateTokens({ id: user.id, role: user.role, email: user.email });
+      // Upgrade hash to bcrypt if legacy format was used
+      if (needsRehash) {
+        try {
+          const newHash = await hashPassword(password);
+          await UserRepository.updatePassword(user.id, newHash);
+        } catch {}
+      }
+
+      // Check delivery partner status if user has a profile or is signing into delivery portal
+      let deliveryProfile = user.deliveryProfile;
+      if (!deliveryProfile) {
+        const cleanDigits = targetIdentifier.replace(/\D/g, '');
+        deliveryProfile = await prisma.deliveryPartner.findFirst({
+          where: {
+            OR: [
+              { userId: user.id },
+              ...(user.mobile ? [{ mobile: user.mobile }] : []),
+              ...(cleanDigits.length >= 10 ? [{ mobile: cleanDigits.slice(-10) }] : []),
+            ],
+          },
+        });
+        if (deliveryProfile && !deliveryProfile.userId) {
+          deliveryProfile = await prisma.deliveryPartner.update({
+            where: { id: deliveryProfile.id },
+            data: { userId: user.id },
+          });
+        }
+      }
+
+      if (deliveryProfile) {
+        if (deliveryProfile.verificationStatus === 'REJECTED') {
+          return res.status(403).json({
+            success: false,
+            message: 'Your delivery partner account has been suspended or rejected. Please contact support.',
+          });
+        }
+
+        // Ensure user account has DELIVERY role
+        if (user.role !== 'DELIVERY' && user.role !== 'ADMIN') {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { role: 'DELIVERY' },
+          });
+          user.role = 'DELIVERY' as any;
+        }
+      }
+
+      const tokens = generateTokens({
+        id: user.id,
+        role: user.role,
+        email: user.email,
+        partnerId: deliveryProfile?.id,
+      });
 
       return res.status(200).json({
         success: true,
@@ -250,6 +267,7 @@ export class AuthController {
           email: user.email,
           mobile: user.mobile,
           role: user.role,
+          partnerId: deliveryProfile?.id,
         },
         token: tokens.accessToken,
         accessToken: tokens.accessToken,
@@ -965,8 +983,8 @@ export class AuthController {
         });
       }
 
-      // Update the password
-      const newHashedPassword = hashPassword(password);
+      // Update the password with bcrypt hash
+      const newHashedPassword = await hashPassword(password);
       await prisma.user.update({
         where: { id: user.id },
         data: { password: newHashedPassword },

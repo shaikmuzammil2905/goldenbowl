@@ -1,13 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import { NotFoundError, BadRequestError, ConflictError } from '../utils/errors.js';
-import crypto from 'crypto';
-
-const PASSWORD_SALT = process.env.PASSWORD_SALT || 'goldenbowl_password_salt_2026';
-
-function hashPassword(password: string): string {
-  return crypto.pbkdf2Sync(password, PASSWORD_SALT, 10000, 64, 'sha512').toString('hex');
-}
-
+import { normalizeEmail, normalizePhone, hashPassword } from '../utils/authUtils.js';
 
 export class DeliveryService {
   static async getPartners() {
@@ -24,9 +17,9 @@ export class DeliveryService {
     vehicle?: string;
     password?: string;
   }) {
-    const cleanName = data.name?.trim();
-    const cleanEmail = data.email?.trim().toLowerCase() || `${data.mobile?.trim()}@goldenbowl.in`;
-    const cleanMobile = data.mobile?.trim();
+    const cleanName = String(data.name || '').trim();
+    const cleanEmail = normalizeEmail(data.email) || `${normalizePhone(data.mobile)}@goldenbowl.in`;
+    const cleanMobile = normalizePhone(data.mobile);
     const vehicle = data.vehicle || 'Bike';
 
     if (!cleanName || cleanName.length < 2) {
@@ -37,7 +30,7 @@ export class DeliveryService {
       throw new BadRequestError('Please enter a valid email address.');
     }
 
-    if (!cleanMobile || !/^\d{10}$/.test(cleanMobile)) {
+    if (!cleanMobile || cleanMobile.length !== 10) {
       throw new BadRequestError('Please enter a valid 10-digit mobile number.');
     }
 
@@ -45,62 +38,152 @@ export class DeliveryService {
       throw new BadRequestError('Password must be at least 6 characters long.');
     }
 
-    // Check if user already exists with this email
-    const existingByEmail = await prisma.user.findUnique({ where: { email: cleanEmail } });
-    if (existingByEmail) {
-      throw new ConflictError('An account with this email address already exists. Please sign in.');
-    }
-
+    const passwordHash = await hashPassword(data.password);
     let userId: string;
-    // Check if user already exists by mobile
-    const existingByMobile = await prisma.user.findFirst({ where: { mobile: cleanMobile } });
-    if (existingByMobile) {
-      // Update existing user to delivery role and new password
-      const updatedUser = await prisma.user.update({
-        where: { id: existingByMobile.id },
+    let partner: any;
+
+    // Check if an account already exists with this normalized email
+    const existingByEmail = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+      include: { deliveryProfile: true },
+    });
+
+    if (existingByEmail) {
+      // Account exists — update details, set delivery role and new bcrypt password
+      userId = existingByEmail.id;
+      await prisma.user.update({
+        where: { id: userId },
         data: {
           name: cleanName,
-          email: cleanEmail,
-          password: hashPassword(data.password),
-          role: 'DELIVERY',
-          provider: 'email',
-        },
-      });
-      userId = updatedUser.id;
-    } else {
-      const newUser = await prisma.user.create({
-        data: {
-          name: cleanName,
-          email: cleanEmail,
           mobile: cleanMobile,
-          password: hashPassword(data.password),
+          password: passwordHash,
           role: 'DELIVERY',
           provider: 'email',
         },
       });
-      userId = newUser.id;
+
+      if (existingByEmail.deliveryProfile) {
+        partner = await prisma.deliveryPartner.update({
+          where: { id: existingByEmail.deliveryProfile.id },
+          data: {
+            name: cleanName,
+            mobile: cleanMobile,
+            vehicle: vehicle,
+          },
+          include: { user: true },
+        });
+      } else {
+        // Link any unattached partner record with same mobile or create new profile
+        const unattachedPartner = await prisma.deliveryPartner.findFirst({
+          where: { mobile: cleanMobile, userId: null },
+        });
+
+        if (unattachedPartner) {
+          partner = await prisma.deliveryPartner.update({
+            where: { id: unattachedPartner.id },
+            data: {
+              userId: userId,
+              name: cleanName,
+              vehicle: vehicle,
+            },
+            include: { user: true },
+          });
+        } else {
+          partner = await prisma.deliveryPartner.create({
+            data: {
+              userId: userId,
+              name: cleanName,
+              mobile: cleanMobile,
+              vehicle: vehicle,
+              verificationStatus: 'PENDING',
+              feeAmount: 700.00,
+              feeStatus: 'PENDING',
+            },
+            include: { user: true },
+          });
+        }
+      }
+    } else {
+      // Check if user exists by mobile
+      const existingByMobile = await prisma.user.findFirst({
+        where: { mobile: cleanMobile },
+        include: { deliveryProfile: true },
+      });
+
+      if (existingByMobile) {
+        userId = existingByMobile.id;
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            name: cleanName,
+            email: cleanEmail,
+            password: passwordHash,
+            role: 'DELIVERY',
+            provider: 'email',
+          },
+        });
+
+        if (existingByMobile.deliveryProfile) {
+          partner = await prisma.deliveryPartner.update({
+            where: { id: existingByMobile.deliveryProfile.id },
+            data: {
+              name: cleanName,
+              vehicle: vehicle,
+            },
+            include: { user: true },
+          });
+        } else {
+          partner = await prisma.deliveryPartner.create({
+            data: {
+              userId: userId,
+              name: cleanName,
+              mobile: cleanMobile,
+              vehicle: vehicle,
+              verificationStatus: 'PENDING',
+              feeAmount: 700.00,
+              feeStatus: 'PENDING',
+            },
+            include: { user: true },
+          });
+        }
+      } else {
+        // Create brand-new user with bcrypt password and DELIVERY role
+        const newUser = await prisma.user.create({
+          data: {
+            name: cleanName,
+            email: cleanEmail,
+            mobile: cleanMobile,
+            password: passwordHash,
+            role: 'DELIVERY',
+            provider: 'email',
+          },
+        });
+        userId = newUser.id;
+
+        partner = await prisma.deliveryPartner.create({
+          data: {
+            userId: userId,
+            name: cleanName,
+            mobile: cleanMobile,
+            vehicle: vehicle,
+            verificationStatus: 'PENDING',
+            feeAmount: 700.00,
+            feeStatus: 'PENDING',
+          },
+          include: { user: true },
+        });
+      }
     }
 
-    const partner = await prisma.deliveryPartner.create({
-      data: {
-        userId: userId,
-        name: cleanName,
-        mobile: cleanMobile,
-        vehicle: vehicle,
-        verificationStatus: 'PENDING',
-        feeAmount: 700.00,
-        feeStatus: 'PENDING',
-      },
-      include: { user: true },
-    });
-
-    await prisma.notification.create({
-      data: {
-        role: 'ADMIN',
-        title: 'New Delivery Partner Application',
-        message: `${partner.name} (${cleanEmail}) applied for delivery partner onboarding.`,
-      },
-    });
+    try {
+      await prisma.notification.create({
+        data: {
+          role: 'ADMIN',
+          title: 'New Delivery Partner Application',
+          message: `${partner.name} (${cleanEmail}) applied for delivery partner onboarding.`,
+        },
+      });
+    } catch {}
 
     return partner;
   }
