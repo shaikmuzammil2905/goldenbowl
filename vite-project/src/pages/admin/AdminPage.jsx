@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   Package,
@@ -71,16 +71,16 @@ export function AdminPage() {
   const fetchOrders = async () => {
     try {
       const res = await orderApi.getOrders()
-      const fetched = res.data || res || []
+      const fetched = Array.isArray(res?.data) ? res.data : (Array.isArray(res?.orders) ? res.orders : (Array.isArray(res) ? res : []))
       // Map API response to match UI fields
       const mapped = fetched.map(o => ({
-        id: o.id,
-        customer: o.customerName || (o.customerUser ? o.customerUser.name : 'Guest'),
-        branch: o.branch?.name || '-',
-        total: o.totalAmount,
-        status: o.status,
-        createdAt: o.createdAt,
-        items: o.items || []
+        id: o?.id || '',
+        customer: o?.customerName || (o?.customerUser ? o.customerUser.name : 'Guest'),
+        branch: o?.branch?.name || o?.branch || '-',
+        total: Number(o?.totalAmount || o?.total || 0),
+        status: o?.status || 'PENDING',
+        createdAt: o?.createdAt || new Date().toISOString(),
+        items: o?.items || []
       }))
       setLiveOrders(mapped)
     } catch (err) {
@@ -106,9 +106,10 @@ export function AdminPage() {
   )
 }
 
-function Dashboard({ orders, loading }) {
-  const sales = orders.reduce((s, o) => s + Number(o.total || 0), 0)
-  const activeOrdersCount = orders.filter(o => o.status !== 'DELIVERED').length
+function Dashboard({ orders = [], loading }) {
+  const safeOrders = Array.isArray(orders) ? orders : []
+  const sales = safeOrders.reduce((s, o) => s + Number(o?.total || 0), 0)
+  const activeOrdersCount = safeOrders.filter(o => o?.status !== 'DELIVERED').length
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
@@ -119,7 +120,7 @@ function Dashboard({ orders, loading }) {
         </div>
         <div style={{ background: '#f0f9ff', border: '1px solid #e2e8f0', borderLeft: '4px solid #0284c7', borderRadius: 16, padding: 14 }}>
           <span style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>Live Orders</span>
-          <strong style={{ display: 'block', fontSize: 20, color: '#0f172a', fontWeight: 900 }}>{orders.length}</strong>
+          <strong style={{ display: 'block', fontSize: 20, color: '#0f172a', fontWeight: 900 }}>{safeOrders.length}</strong>
           <small style={{ color: '#0284c7', fontSize: 9.5, fontWeight: 700 }}>{activeOrdersCount} active in kitchen</small>
         </div>
         <div style={{ background: '#f0fdf4', border: '1px solid #e2e8f0', borderLeft: '4px solid #16a34a', borderRadius: 16, padding: 14 }}>
@@ -144,7 +145,7 @@ function Dashboard({ orders, loading }) {
           <div style={{ height: 8, background: 'rgba(255,255,255,0.2)', borderRadius: 10, overflow: 'hidden' }}><div style={{ width: '83%', height: '100%', background: 'linear-gradient(90deg, #dfa500, #f5c518)', borderRadius: 10 }} /></div>
         </div>
       </div>
-      <Orders orders={orders} fetchOrders={() => {}} />
+      <Orders orders={safeOrders} fetchOrders={() => {}} />
     </>
   )
 }
@@ -165,15 +166,18 @@ function Orders({ orders = [], loading = false, fetchOrders }) {
     return { date, time, full: `${date}, ${time}` }
   }
 
-  const filtered = orders.filter(o => {
-    const matchesSearch = o.id.toLowerCase().includes(filter.toLowerCase()) ||
-      o.customer.toLowerCase().includes(filter.toLowerCase()) ||
-      o.branch.toLowerCase().includes(filter.toLowerCase())
+  const safeOrders = Array.isArray(orders) ? orders : []
+  const filterLower = (filter || '').toLowerCase()
+  const filtered = safeOrders.filter(o => {
+    const idStr = String(o?.id || '').toLowerCase()
+    const customerStr = String(o?.customer || '').toLowerCase()
+    const branchStr = String(o?.branch || '').toLowerCase()
+    const matchesSearch = idStr.includes(filterLower) || customerStr.includes(filterLower) || branchStr.includes(filterLower)
     
-    const matchesStatus = statusFilter === 'ALL' || o.status === statusFilter
+    const matchesStatus = statusFilter === 'ALL' || o?.status === statusFilter
 
     let matchesDate = true
-    if (o.createdAt) {
+    if (o?.createdAt) {
       const orderDate = new Date(o.createdAt)
       const now = new Date()
       
@@ -196,10 +200,10 @@ function Orders({ orders = [], loading = false, fetchOrders }) {
     return matchesSearch && matchesStatus && matchesDate
   })
 
-  const totalAmount = filtered.reduce((acc, o) => acc + Number(o.total || 0), 0)
-  const deliveredCount = filtered.filter(o => o.status === 'DELIVERED').length
-  const cancelledCount = filtered.filter(o => o.status === 'CANCELLED').length
-  const activeCount = filtered.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED').length
+  const totalAmount = filtered.reduce((acc, o) => acc + Number(o?.total || 0), 0)
+  const deliveredCount = filtered.filter(o => o?.status === 'DELIVERED').length
+  const cancelledCount = filtered.filter(o => o?.status === 'CANCELLED').length
+  const activeCount = filtered.filter(o => o?.status !== 'DELIVERED' && o?.status !== 'CANCELLED').length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
