@@ -6,6 +6,7 @@ import { createOrder } from '../../services/prototypeStore'
 import { usePrototypeContext } from '../../context/PrototypeContext'
 import { NotificationPanel } from '../../components/notifications/NotificationPanel'
 import { openRazorpayCheckout, RAZORPAY_KEY_ID } from '../../services/razorpay'
+import { authStorage } from '../../services/storage/authStorage'
 
 
 const titleMap={home:'Good food. Better bowls.',search:'Search food',orders:'My orders',profile:'My account',categories:'Categories',cart:'Your cart',checkout:'Checkout',payment:'Payment','order-success':'Order confirmed',track:'Track order',notifications:'Notifications',offers:'Golden Offers & Deals'}
@@ -350,9 +351,10 @@ function Payment() {
     );
   }
 
-  const customerName = sessionStorage.getItem('bowlCustomerName') || 'Priya Sharma';
-  const customerEmail = sessionStorage.getItem('bowlCustomerEmail') || 'priya@example.com';
-  const customerMobile = sessionStorage.getItem('bowlCustomerMobile') || '9876543210';
+  const customerUser = authStorage.getCustomerUser() || {};
+  const customerName = sessionStorage.getItem('bowlCustomerName') || customerUser.name || 'Valued Customer';
+  const customerEmail = sessionStorage.getItem('bowlCustomerEmail') || customerUser.email || '';
+  const customerMobile = sessionStorage.getItem('bowlCustomerMobile') || customerUser.mobile || '';
 
   const finalizeOrder = (paymentData = {}) => {
     const order = createOrder({
@@ -365,7 +367,7 @@ function Payment() {
       paymentId: paymentData.paymentId || `TXN_${Date.now()}`,
       razorpayPaymentId: paymentData.paymentId || null,
       paymentStatus: 'PAID',
-      driver: cart.type === 'Delivery' ? 'Rahul Kumar' : null,
+      driver: null,
       eta: cart.type === 'Delivery' ? 30 : 0,
     });
     localStorage.removeItem(CART_KEY);
@@ -704,15 +706,16 @@ function OrderDetail({id}) {
     </>
   )
 }
-function Tracking({id}){const {orders}=usePrototypeContext();const o=orders.find(x=>x.id===id)||orders[0];return <><div className="route-map">🛵<span>• • • • •</span>🏠</div><h1>Arriving in {o?.eta||25} min</h1><p>Order #{o?.id} • {o?.status?.replaceAll('_',' ')}</p><div className="route-driver"><span>RK</span><div><strong>{o?.driver||'Rahul Kumar'}</strong><small>Delivery partner</small></div><button type="button">Call</button></div></>}
+function Tracking({id}){const {orders}=usePrototypeContext();const o=orders.find(x=>x.id===id)||orders[0];const driverName=o?.driver||'Assigned Partner';const initials=driverName.split(' ').map(x=>x[0]).join('').slice(0,2);return <><div className="route-map">🛵<span>• • • • •</span>🏠</div><h1>Arriving in {o?.eta||25} min</h1><p>Order #{o?.id} • {o?.status?.replaceAll('_',' ')}</p><div className="route-driver"><span>{initials}</span><div><strong>{driverName}</strong><small>Delivery partner</small></div><button type="button">Call</button></div></>}
 function Profile() {
   const navigate = useNavigate()
   const [activeModal, setActiveModal] = React.useState(null)
+  const customerUser = authStorage.getCustomerUser() || {}
   const [user, setUser] = React.useState(() => {
     return {
-      name: sessionStorage.getItem('bowlCustomerName') || 'Priya Sharma',
-      email: sessionStorage.getItem('bowlCustomerEmail') || 'priya@example.com',
-      phone: sessionStorage.getItem('bowlCustomerMobile') || '+91 98765 43210',
+      name: sessionStorage.getItem('bowlCustomerName') || customerUser.name || 'Customer Account',
+      email: sessionStorage.getItem('bowlCustomerEmail') || customerUser.email || 'customer@goldenbowl.com',
+      phone: sessionStorage.getItem('bowlCustomerMobile') || customerUser.mobile || '+91 98765 00000',
     }
   })
   const [addresses, setAddresses] = React.useState([

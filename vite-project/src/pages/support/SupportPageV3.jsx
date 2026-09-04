@@ -395,7 +395,7 @@ function Orders({ orders }) {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #f1f5f9' }}>
                 <span>Assigned Partner</span>
-                <strong>{selectedOrder.driver || 'Rahul Kumar'}</strong>
+                <strong>{selectedOrder.driver || 'Unassigned'}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Payment Mode</span>

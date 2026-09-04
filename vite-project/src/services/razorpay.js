@@ -44,9 +44,9 @@ export function loadRazorpayScript() {
 export async function openRazorpayCheckout({
   amount,
   orderId,
-  customerName = 'Priya Sharma',
+  customerName = 'Valued Customer',
   customerEmail = 'customer@goldenbowl.com',
-  customerPhone = '9876543210',
+  customerPhone = '',
   description = 'Golden Food Bowl Order Payment',
   notes = {},
   onSuccess,
