@@ -9,6 +9,11 @@ if (API_BASE_URL.endsWith('/')) {
   API_BASE_URL = API_BASE_URL.slice(0, -1);
 }
 
+// Force consistent routing to /api in case Vercel env vars are incorrectly set to /aws-api
+if (API_BASE_URL.includes('aws-api')) {
+  API_BASE_URL = '/api';
+}
+
 /**
  * Production-ready API Client for Golden Food Bowl Backend Integration.
  * Automatically handles standard HTTP requests, authorization headers,
