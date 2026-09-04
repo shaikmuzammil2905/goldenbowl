@@ -772,13 +772,13 @@ export class AuthController {
   // ── PASSWORD RESET REQUEST: POST /api/auth/request-reset ────────────────────
   static async requestPasswordReset(req: Request, res: Response, next: NextFunction) {
     try {
-      const { identifier } = req.body;
-      const rawTarget = (identifier || '').toString().trim();
+      const { identifier, email } = req.body;
+      const rawTarget = (email || identifier || '').toString().trim();
 
       if (!rawTarget) {
         return res.status(400).json({
           success: false,
-          message: 'Please enter your registered email or mobile number.',
+          message: 'Please enter your registered email address.',
         });
       }
 
@@ -796,7 +796,7 @@ export class AuthController {
         if (!cleanPhone) {
           return res.status(400).json({
             success: false,
-            message: 'Please enter a valid 10-digit mobile number.',
+            message: 'Please enter a valid email address or 10-digit mobile number.',
           });
         }
         normalizedIdentifier = cleanPhone;
@@ -815,21 +815,28 @@ export class AuthController {
       if (recentRequest) {
         return res.status(429).json({
           success: false,
-          message: 'Please wait 60 seconds before requesting another password reset.',
+          message: 'Please wait 60 seconds before requesting another password reset code.',
         });
       }
 
       // Look up the user (don't reveal if account exists for security)
       const user = await UserRepository.findByIdentifier(normalizedIdentifier);
 
-      // Generate a secure reset token
+      // Generate a secure reset token & 6-digit OTP
       const resetToken = crypto.randomBytes(32).toString('hex');
       const hashedToken = crypto.createHmac('sha256', OTP_SECRET).update(resetToken).digest('hex');
+      const rawOtp = String(crypto.randomInt(100000, 1000000));
+      const hashedOtp = hashOtp(normalizedIdentifier, rawOtp);
       const expiresAt = new Date(now + 15 * 60 * 1000); // 15 minutes
 
-      // Invalidate any previous reset tokens for this identifier
+      // Invalidate any previous reset tokens & OTPs for this identifier
       await prisma.otpCode.updateMany({
-        where: { identifier: `reset_${normalizedIdentifier}`, used: false },
+        where: {
+          OR: [
+            { identifier: `reset_${normalizedIdentifier}`, used: false },
+            { identifier: normalizedIdentifier, used: false },
+          ],
+        },
         data: { used: true },
       });
 
@@ -845,22 +852,31 @@ export class AuthController {
         },
       });
 
+      // Store the hashed OTP
+      await prisma.otpCode.create({
+        data: {
+          identifier: normalizedIdentifier,
+          identifierType: isEmail ? 'EMAIL' : 'MOBILE',
+          email: isEmail ? normalizedIdentifier : undefined,
+          otp: hashedOtp,
+          expiresAt,
+          attempts: 0,
+        },
+      });
+
       // Only send the email/SMS if the user actually exists
       if (user) {
         if (isEmail) {
           try {
-            await sendPasswordResetEmail(normalizedIdentifier, resetToken, user.name);
+            await sendPasswordResetEmail(normalizedIdentifier, resetToken, user.name, rawOtp, user.role);
           } catch (emailErr: any) {
             console.error('Failed to send password reset email:', emailErr.message);
-            // Don't fail the request — security best practice
           }
         } else {
-          // For mobile users, send an SMS with a short message
+          // For mobile users, send an SMS with the OTP
           const { sendMobileOtpSms: sendSms } = await import('../services/smsService.js');
-          // We use the first 6 digits of the token as a "reset code" for SMS
-          const resetCode = resetToken.slice(0, 6).toUpperCase();
           try {
-            await sendSms(normalizedIdentifier, resetCode);
+            await sendSms(normalizedIdentifier, rawOtp);
           } catch (smsErr: any) {
             console.error('Failed to send password reset SMS:', smsErr.message);
           }
@@ -871,8 +887,8 @@ export class AuthController {
       return res.status(200).json({
         success: true,
         message: isEmail
-          ? `If an account exists for ${normalizedIdentifier}, a password reset link has been sent to your email.`
-          : `If an account exists for +91 ${normalizedIdentifier}, recovery instructions have been sent via SMS.`,
+          ? `If an account exists for ${normalizedIdentifier}, an OTP and password reset link have been sent to your email.`
+          : `If an account exists for +91 ${normalizedIdentifier}, an OTP has been sent via SMS.`,
       });
     } catch (error) {
       next(error);
@@ -882,62 +898,94 @@ export class AuthController {
   // ── RESET PASSWORD: POST /api/auth/reset-password ───────────────────────────
   static async resetPassword(req: Request, res: Response, next: NextFunction) {
     try {
-      const { token, password } = req.body;
-      if (!token || !password || password.length < 6) {
+      const { token, email, identifier, otp, password } = req.body;
+      if (!password || password.length < 6) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid request. Please provide a valid token and a new password with at least 6 characters.',
+          message: 'Password must be at least 6 characters long.',
         });
       }
 
-      // 1. Hash the provided token exactly as it was generated
-      const hashedToken = crypto.createHmac('sha256', OTP_SECRET).update(token).digest('hex');
+      let actualIdentifier: string | null = null;
+      let matchedRecordId: string | null = null;
 
-      // 2. Find the active, unexpired token record
-      const record = await prisma.otpCode.findFirst({
-        where: {
-          identifierType: 'PASSWORD_RESET',
-          otp: hashedToken,
-          used: false,
-          expiresAt: { gt: new Date() },
-        },
-      });
+      // Case 1: Token-based reset
+      if (token) {
+        const hashedToken = crypto.createHmac('sha256', OTP_SECRET).update(token).digest('hex');
+        const record = await prisma.otpCode.findFirst({
+          where: {
+            identifierType: 'PASSWORD_RESET',
+            otp: hashedToken,
+            used: false,
+            expiresAt: { gt: new Date() },
+          },
+        });
 
-      if (!record) {
+        if (record) {
+          actualIdentifier = record.identifier.replace(/^reset_/, '');
+          matchedRecordId = record.id;
+        }
+      }
+
+      // Case 2: OTP-based reset
+      const targetUser = (email || identifier || '').toString().trim();
+      if (!actualIdentifier && targetUser && otp) {
+        const cleanTarget = targetUser.includes('@') ? targetUser.toLowerCase() : normalizeIndianMobile(targetUser) || targetUser;
+        const rawOtp = otp.toString().trim();
+        const computedHash = hashOtp(cleanTarget, rawOtp);
+
+        const record = await prisma.otpCode.findFirst({
+          where: {
+            identifier: cleanTarget,
+            used: false,
+            expiresAt: { gt: new Date() },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (record && (record.otp === computedHash || record.otp === rawOtp)) {
+          actualIdentifier = cleanTarget;
+          matchedRecordId = record.id;
+        }
+      }
+
+      if (!actualIdentifier || !matchedRecordId) {
         return res.status(400).json({
           success: false,
-          message: 'This password reset link is invalid or has expired. Please request a new one.',
+          message: 'This reset code or link is invalid or has expired. Please request a new one.',
         });
       }
 
-      // 3. Extract the identifier from `reset_email@example.com`
-      const actualIdentifier = record.identifier.replace(/^reset_/, '');
-
-      // 4. Find the user
+      // Find the user
       const user = await UserRepository.findByIdentifier(actualIdentifier);
       if (!user) {
         return res.status(400).json({
           success: false,
-          message: 'User associated with this reset link could not be found.',
+          message: 'User associated with this reset request could not be found.',
         });
       }
 
-      // 5. Update the password
+      // Update the password
       const newHashedPassword = hashPassword(password);
       await prisma.user.update({
         where: { id: user.id },
         data: { password: newHashedPassword },
       });
 
-      // 6. Invalidate the token
-      await prisma.otpCode.update({
-        where: { id: record.id },
+      // Invalidate all tokens & OTPs for this identifier
+      await prisma.otpCode.updateMany({
+        where: {
+          OR: [
+            { identifier: actualIdentifier, used: false },
+            { identifier: `reset_${actualIdentifier}`, used: false },
+          ],
+        },
         data: { used: true },
       });
 
       return res.status(200).json({
         success: true,
-        message: 'Your password has been successfully reset. You can now log in.',
+        message: 'Password reset successfully. You can now log in with your email and new password.',
       });
     } catch (error) {
       next(error);

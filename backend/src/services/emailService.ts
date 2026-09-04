@@ -213,16 +213,21 @@ export async function sendOtpEmail(
 }
 
 /**
- * Sends a password reset email with a unique reset link.
+ * Sends a password reset email containing both a 6-digit verification OTP
+ * and a secure one-click reset link.
  *
  * @param toEmail    Recipient email address (already validated by caller)
  * @param resetToken The unique reset token embedded in the reset URL
  * @param userName   Optional display name for greeting personalization
+ * @param otp        Optional 6-digit OTP code for on-screen entry
+ * @param role       Optional user role to route link to delivery or customer portal
  */
 export async function sendPasswordResetEmail(
   toEmail: string,
   resetToken: string,
-  userName?: string
+  userName?: string,
+  otp?: string,
+  role?: string
 ): Promise<void> {
   if (missingVars.length > 0) {
     throw new Error(
@@ -234,28 +239,33 @@ export async function sendPasswordResetEmail(
     ? userName.charAt(0).toUpperCase() + userName.slice(1)
     : 'there';
 
+  const isDelivery = role?.toUpperCase() === 'DELIVERY';
+  const rolePath = isDelivery ? 'delivery' : 'customer';
+
   // Build reset URL — use frontend URL from env
-  const frontendOrigin = (process.env.FRONTEND_URL || 'https://goldenbowl.vercel.app').split(',')[0].trim();
-  const resetUrl = `${frontendOrigin}/customer/reset-password?token=${resetToken}&email=${encodeURIComponent(toEmail)}`;
+  const frontendOrigin = (process.env.FRONTEND_URL || 'https://www.goldenfoodbowl.com').split(',')[0].trim();
+  const resetUrl = `${frontendOrigin}/${rolePath}/reset-password?token=${resetToken}&email=${encodeURIComponent(toEmail)}`;
 
   const mailOptions = {
     from: env.SMTP_FROM,
     to: toEmail,
-    subject: 'Reset your Golden Food Bowl password',
+    subject: otp ? `${otp} is your Golden Food Bowl Password Reset OTP` : 'Reset your Golden Food Bowl password',
     text: [
       `Hi ${displayName},`,
       '',
       'We received a request to reset your Golden Food Bowl account password.',
       '',
-      `Click the link below to set a new password:`,
+      otp ? `Your password reset OTP is: ${otp}` : '',
+      '',
+      'You can also reset your password directly using the secure link below:',
       resetUrl,
       '',
-      'This link expires in 15 minutes.',
+      'This code and link expire in 15 minutes.',
       'If you did not request a password reset, you can safely ignore this email.',
       '',
       '— Golden Food Bowl Team',
       'Fresh • Tasty • Fast | goldenfoodbowl.com',
-    ].join('\n'),
+    ].filter(Boolean).join('\n'),
     html: `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -283,7 +293,7 @@ export async function sendPasswordResetEmail(
               <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:900;
                           letter-spacing:1px;line-height:1.2;">GOLDEN FOOD BOWL</h1>
               <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:13px;">
-                Fresh &bull; Tasty &bull; Fast
+                ${isDelivery ? 'Delivery Partner Portal' : 'Fresh &bull; Tasty &bull; Fast'}
               </p>
             </td>
           </tr>
@@ -294,14 +304,34 @@ export async function sendPasswordResetEmail(
               <p style="font-size:16px;color:#374151;margin:0 0 6px;font-weight:600;">
                 Hi ${displayName} 👋
               </p>
-              <p style="font-size:15px;color:#6b7280;margin:0 0 28px;line-height:1.6;">
+              <p style="font-size:15px;color:#6b7280;margin:0 0 24px;line-height:1.6;">
                 We received a request to reset your
                 <strong style="color:#d97706;">Golden Food Bowl</strong> account password.
-                Click the button below to set a new password.
+                You can verify using the OTP code or click the button below.
               </p>
 
+              ${otp ? `
+              <!-- OTP Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+                <tr>
+                  <td style="background:#fffbeb;border:2px dashed #f59e0b;
+                              border-radius:16px;padding:24px 20px;text-align:center;">
+                    <p style="font-size:11px;color:#92400e;margin:0 0 8px;
+                               text-transform:uppercase;letter-spacing:3px;font-weight:700;">
+                      Password Reset OTP Code
+                    </p>
+                    <span style="font-size:42px;font-weight:900;letter-spacing:12px;
+                                  color:#d97706;font-family:'Courier New',Courier,monospace;
+                                  display:inline-block;line-height:1;">
+                      ${otp}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+              ` : ''}
+
               <!-- Reset Button -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
                 <tr>
                   <td align="center">
                     <a href="${resetUrl}"
@@ -309,7 +339,7 @@ export async function sendPasswordResetEmail(
                               color:#ffffff;text-decoration:none;padding:16px 40px;
                               border-radius:12px;font-size:16px;font-weight:800;
                               letter-spacing:0.5px;box-shadow:0 4px 14px rgba(217,119,6,0.4);">
-                      🔐 Reset My Password
+                      🔐 Reset Password
                     </a>
                   </td>
                 </tr>
@@ -332,7 +362,7 @@ export async function sendPasswordResetEmail(
                   <td style="background:#f0fdf4;border-left:3px solid #22c55e;
                               border-radius:8px;padding:12px 16px;">
                     <p style="font-size:13px;color:#166534;margin:0;">
-                      ⏱ &nbsp;This link expires in <strong>15 minutes</strong>.
+                      ⏱ &nbsp;This OTP and link expire in <strong>15 minutes</strong>.
                     </p>
                   </td>
                 </tr>
@@ -371,3 +401,4 @@ export async function sendPasswordResetEmail(
   const info = await transporter.sendMail(mailOptions);
   console.log(`📧 Password reset email dispatched to ${toEmail} [messageId: ${info.messageId}]`);
 }
+

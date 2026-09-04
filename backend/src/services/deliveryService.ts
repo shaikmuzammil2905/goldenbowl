@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma.js';
-import { NotFoundError } from '../utils/errors.js';
+import { NotFoundError, BadRequestError, ConflictError } from '../utils/errors.js';
 import crypto from 'crypto';
 
 const PASSWORD_SALT = process.env.PASSWORD_SALT || 'goldenbowl_password_salt_2026';
@@ -19,59 +19,86 @@ export class DeliveryService {
 
   static async registerPartner(data: {
     name: string;
+    email?: string;
     mobile: string;
     vehicle?: string;
     password?: string;
   }) {
-    let userId: string | undefined = undefined;
+    const cleanName = data.name?.trim();
+    const cleanEmail = data.email?.trim().toLowerCase() || `${data.mobile?.trim()}@goldenbowl.in`;
+    const cleanMobile = data.mobile?.trim();
+    const vehicle = data.vehicle || 'Bike';
 
-    // Create User record for the delivery partner if password is provided
-    if (data.password) {
-      const email = `${data.mobile}@goldenbowl.in`;
-      // Check if user already exists
-      const existingUser = await prisma.user.findFirst({ where: { mobile: data.mobile } });
-      if (!existingUser) {
-        const user = await prisma.user.create({
-          data: {
-            name: data.name,
-            mobile: data.mobile,
-            email: email,
-            password: hashPassword(data.password),
-            role: 'DELIVERY',
-            provider: 'mobile',
-          }
-        });
-        userId = user.id;
-      } else {
-        // If user exists, update password and role
-        const user = await prisma.user.update({
-          where: { id: existingUser.id },
-          data: {
-            password: hashPassword(data.password),
-            role: 'DELIVERY',
-          }
-        });
-        userId = user.id;
-      }
+    if (!cleanName || cleanName.length < 2) {
+      throw new BadRequestError('Please enter a valid full name (minimum 2 characters).');
+    }
+
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      throw new BadRequestError('Please enter a valid email address.');
+    }
+
+    if (!cleanMobile || !/^\d{10}$/.test(cleanMobile)) {
+      throw new BadRequestError('Please enter a valid 10-digit mobile number.');
+    }
+
+    if (!data.password || data.password.length < 6) {
+      throw new BadRequestError('Password must be at least 6 characters long.');
+    }
+
+    // Check if user already exists with this email
+    const existingByEmail = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    if (existingByEmail) {
+      throw new ConflictError('An account with this email address already exists. Please sign in.');
+    }
+
+    let userId: string;
+    // Check if user already exists by mobile
+    const existingByMobile = await prisma.user.findFirst({ where: { mobile: cleanMobile } });
+    if (existingByMobile) {
+      // Update existing user to delivery role and new password
+      const updatedUser = await prisma.user.update({
+        where: { id: existingByMobile.id },
+        data: {
+          name: cleanName,
+          email: cleanEmail,
+          password: hashPassword(data.password),
+          role: 'DELIVERY',
+          provider: 'email',
+        },
+      });
+      userId = updatedUser.id;
+    } else {
+      const newUser = await prisma.user.create({
+        data: {
+          name: cleanName,
+          email: cleanEmail,
+          mobile: cleanMobile,
+          password: hashPassword(data.password),
+          role: 'DELIVERY',
+          provider: 'email',
+        },
+      });
+      userId = newUser.id;
     }
 
     const partner = await prisma.deliveryPartner.create({
       data: {
         userId: userId,
-        name: data.name,
-        mobile: data.mobile,
-        vehicle: data.vehicle || 'Bike',
+        name: cleanName,
+        mobile: cleanMobile,
+        vehicle: vehicle,
         verificationStatus: 'PENDING',
         feeAmount: 700.00,
         feeStatus: 'PENDING',
       },
+      include: { user: true },
     });
 
     await prisma.notification.create({
       data: {
         role: 'ADMIN',
         title: 'New Delivery Partner Application',
-        message: `${partner.name} applied for delivery partner onboarding.`,
+        message: `${partner.name} (${cleanEmail}) applied for delivery partner onboarding.`,
       },
     });
 

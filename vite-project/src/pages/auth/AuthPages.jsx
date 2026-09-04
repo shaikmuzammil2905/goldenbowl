@@ -951,6 +951,7 @@ export function CustomerLocationPage() {
 export function DeliverySignUpPage() {
   const n = useNavigate();
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [vehicle, setVehicle] = useState('Bike');
   const [password, setPassword] = useState('');
@@ -959,9 +960,23 @@ export function DeliverySignUpPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const validMobile = /^\d{10}$/.test(mobile.trim());
+
   const submit = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !/^\d{10}$/.test(mobile)) return;
+    if (!name.trim() || name.trim().length < 2) {
+      setError('Please enter a valid full name (minimum 2 characters).');
+      return;
+    }
+    if (!validEmail) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (!validMobile) {
+      setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
     if (password.length < 6) {
       setError('Password must be at least 6 characters long.');
       return;
@@ -977,15 +992,21 @@ export function DeliverySignUpPage() {
     try {
       const res = await apiClient('/delivery/partners', {
         method: 'POST',
-        body: { name: name.trim(), mobile, vehicle, password },
+        body: {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          mobile: mobile.trim(),
+          vehicle,
+          password
+        },
       });
       if (res.success) {
         n('/delivery/verification');
       } else {
-        setError(res.message || 'Registration failed.');
+        setError(res.message || 'Registration failed. Please check details.');
       }
     } catch (err) {
-      setError(err.message || 'Network error.');
+      setError(err.message || 'Registration failed. Please check network connection.');
     } finally {
       setLoading(false);
     }
@@ -996,11 +1017,13 @@ export function DeliverySignUpPage() {
       <h2>Join Bowl Delivery Team</h2>
       <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 16px' }}>Earn up to ₹35,000/month delivering fresh food bowls.</p>
       <form onSubmit={submit} className="clean-form">
-        <TextField icon={UserRound} label="Full Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rahul Kumar" required />
-        <TextField icon={Phone} label="Mobile Number" value={mobile} onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit mobile number" inputMode="numeric" required />
+        <TextField icon={UserRound} label="Full Name" value={name} onChange={(e) => { setName(e.target.value); setError(''); }} placeholder="e.g. Rahul Kumar" required />
+        <TextField icon={Mail} label="Email Address" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} placeholder="name@example.com" required />
+        <TextField icon={Phone} label="Mobile Number" value={mobile} onChange={(e) => { setMobile(e.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }} placeholder="10-digit mobile number" inputMode="numeric" required />
+        
         <label className="clean-field">
           <span className="field-label"><Car size={15} /> Vehicle Type</span>
-          <select value={vehicle} onChange={(e) => setVehicle(e.target.value)} style={{ padding: 10, borderRadius: 10, border: '1px solid #cbd5e1', width: '100%' }}>
+          <select value={vehicle} onChange={(e) => setVehicle(e.target.value)} style={{ padding: 10, borderRadius: 10, border: '1px solid #cbd5e1', width: '100%', background: '#fff', fontSize: 13 }}>
             <option value="Bike">Motorcycle / Bike</option>
             <option value="Scooter">Scooter / Moped</option>
             <option value="Electric Vehicle">Electric EV Scooter</option>
@@ -1039,7 +1062,7 @@ export function DeliverySignUpPage() {
 
         <ErrorBox msg={error} />
 
-        <button type="submit" className="auth-primary gold-btn" disabled={!name.trim() || !/^\d{10}$/.test(mobile) || loading}>
+        <button type="submit" className="auth-primary gold-btn" disabled={!name.trim() || !validEmail || !validMobile || loading}>
           {loading ? <><Loader2 size={16} className="animate-spin" /> Processing...</> : 'Continue to Verification →'}
         </button>
       </form>
@@ -1232,55 +1255,233 @@ export function DeliveryApplicationSubmittedPage() {
   );
 }
 
-// ── 7. DELIVERY FORGOT PASSWORD ───────────────────────────────────────────────
+// ── 7. DELIVERY FORGOT PASSWORD (EMAIL + OTP + PASSWORD RESET) ────────────────
 export function DeliveryForgotPasswordPage() {
   const n = useNavigate();
-  const [identifier, setIdentifier] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [step, setStep] = useState('EMAIL'); // 'EMAIL' | 'OTP' | 'PASSWORD' | 'SUCCESS'
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cooldown, setCooldown] = useState(0);
+
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((c) => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  const handleSendOtp = async (e) => {
+    if (e) e.preventDefault();
+    if (!validEmail || (cooldown > 0 && step !== 'EMAIL')) return;
+    setError('');
+    setLoading(true);
+
+    try {
+      authStorage.clearDeliveryAuth();
+      const res = await apiClient('/auth/request-reset', {
+        method: 'POST',
+        body: { email: email.trim().toLowerCase() },
+      });
+      if (res.success) {
+        setStep('OTP');
+        setCooldown(60);
+      } else {
+        setError(res.message || 'Failed to send OTP. Please try again.');
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to send OTP. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtpStep = (e) => {
+    e.preventDefault();
+    if (otp.replace(/\D/g, '').length !== 6) {
+      setError('Please enter the 6-digit OTP code sent to your email.');
+      return;
+    }
+    setError('');
+    setStep('PASSWORD');
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await apiClient('/auth/reset-password', {
+        method: 'POST',
+        body: {
+          email: email.trim().toLowerCase(),
+          otp: otp.trim(),
+          password,
+        },
+      });
+
+      if (res.success) {
+        setStep('SUCCESS');
+      } else {
+        setError(res.message || 'Failed to reset password. The code might be expired.');
+      }
+    } catch (err) {
+      setError(err.message || 'An error occurred during password reset.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <DeliveryFrame step={1} totalSteps={1} stepLabel="Account Recovery">
-      <h2>Reset Password</h2>
-      <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 16px' }}>Enter your registered mobile number to receive recovery instructions.</p>
-      {!submitted ? (
-        <form onSubmit={async (e) => { 
-          e.preventDefault(); 
-          setLoading(true); 
-          setError(''); 
-          try { 
-            authStorage.clearDeliveryAuth();
-            await apiClient('/auth/request-reset', { method: 'POST', body: { identifier } }); 
-            setSubmitted(true); 
-          } catch (err) { 
-            console.error(err); 
-            setError('Failed to send reset link. Please try again.'); 
-          } finally { 
-            setLoading(false); 
-          } 
-        }} className="clean-form">
-          <TextField
-            icon={Phone}
-            label="Mobile Number"
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
-            placeholder="Registered mobile number"
-            required
-          />
-          <button type="submit" className="auth-primary gold-btn" disabled={!identifier.trim() || loading}>
-            {loading ? <Loader2 size={16} className="animate-spin" /> : 'Send Password Reset Link →'}
-          </button>
-          {error && <p style={{ color: '#b91c1c', marginTop: 8 }}>{error}</p>}
-          <p className="auth-switch-text"><Link to="/delivery/signin">Back to Sign In</Link></p>
-        </form>
-      ) : (
-        <div style={{ textAlign: 'center', padding: '12px 0' }}>
-          <p style={{ fontSize: 13, color: '#166534', background: '#f0fdf4', padding: '12px', borderRadius: 10, border: '1px solid #bbf7d0' }}>
-            ✓ If an account exists for <strong>{identifier}</strong>, recovery instructions have been sent.
+      {step === 'EMAIL' && (
+        <>
+          <h2>Forgot Password</h2>
+          <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 16px' }}>
+            Enter your registered email address to receive a verification OTP.
           </p>
-          <button type="button" className="auth-primary gold-btn" onClick={() => n('/delivery/signin')} style={{ marginTop: 12 }}>
-            Return to Sign In
+          <form onSubmit={handleSendOtp} className="clean-form">
+            <TextField
+              icon={Mail}
+              label="Email Address"
+              type="email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setError(''); }}
+              placeholder="name@example.com"
+              required
+            />
+            {error && <p style={{ color: '#dc2626', fontSize: 12, margin: '4px 0', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>⚠️ {error}</p>}
+            <button type="submit" className="auth-primary gold-btn" disabled={!validEmail || loading}>
+              {loading ? <><Loader2 size={16} className="animate-spin" /> Sending OTP...</> : 'Send OTP →'}
+            </button>
+            <p className="auth-switch-text"><Link to="/delivery/signin">Back to Sign In</Link></p>
+          </form>
+        </>
+      )}
+
+      {step === 'OTP' && (
+        <>
+          <h2>Verify Email</h2>
+          <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 16px' }}>
+            Enter the OTP sent to your email address: <strong>{email}</strong>
+          </p>
+          <form onSubmit={handleVerifyOtpStep} className="clean-form">
+            <div className="csi-otp-row" style={{ display: 'flex', gap: 8, justifyContent: 'center', margin: '10px 0 16px' }}>
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <input
+                  key={i}
+                  className="csi-otp-box"
+                  maxLength={1}
+                  value={otp[i] || ''}
+                  inputMode="numeric"
+                  autoFocus={i === 0}
+                  style={{ width: 44, height: 48, textAlign: 'center', fontSize: 20, fontWeight: 800, borderRadius: 10, border: '1.5px solid #cbd5e1', outline: 'none' }}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, '');
+                    const arr = (otp + '      ').slice(0, 6).split('');
+                    arr[i] = v;
+                    setOtp(arr.join('').trimEnd().slice(0, 6));
+                    if (v && e.target.nextSibling) e.target.nextSibling.focus();
+                  }}
+                />
+              ))}
+            </div>
+
+            {error && <p style={{ color: '#dc2626', fontSize: 12, margin: '4px 0', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>⚠️ {error}</p>}
+
+            <button type="submit" className="auth-primary gold-btn" disabled={otp.replace(/\s/g, '').length !== 6}>
+              Verify OTP →
+            </button>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, fontSize: 12 }}>
+              <button type="button" className="csi-back-link" onClick={() => { setStep('EMAIL'); setOtp(''); setError(''); }} style={{ border: 0, background: 'none', color: '#64748b', cursor: 'pointer', padding: 0 }}>
+                ← Change Email
+              </button>
+              <button
+                type="button"
+                className="csi-back-link"
+                disabled={loading || cooldown > 0}
+                onClick={handleSendOtp}
+                style={{ border: 0, background: 'none', color: cooldown > 0 ? '#94a3b8' : '#d97706', cursor: cooldown > 0 ? 'default' : 'pointer', fontWeight: 700, padding: 0 }}
+              >
+                {cooldown > 0 ? `Resend OTP in ${cooldown}s` : 'Resend OTP'}
+              </button>
+            </div>
+          </form>
+        </>
+      )}
+
+      {step === 'PASSWORD' && (
+        <>
+          <h2>Create New Password</h2>
+          <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 16px' }}>
+            Set a new secure password for <strong>{email}</strong>
+          </p>
+          <form onSubmit={handleResetPassword} className="clean-form">
+            <label className="clean-field">
+              <span className="field-label"><Lock size={15} /> New Password</span>
+              <div className="csi-password-field">
+                <input
+                  className="csi-password-input"
+                  type={showPw ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                  placeholder="Minimum 6 characters"
+                  required
+                />
+                <button type="button" className="csi-pw-toggle" onClick={() => setShowPw(!showPw)} tabIndex={-1}>
+                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </label>
+
+            <label className="clean-field">
+              <span className="field-label"><Lock size={15} /> Confirm Password</span>
+              <div className="csi-password-field">
+                <input
+                  className="csi-password-input"
+                  type={showPw ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                  placeholder="Re-enter password"
+                  required
+                />
+              </div>
+            </label>
+
+            {error && <p style={{ color: '#dc2626', fontSize: 12, margin: '4px 0', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>⚠️ {error}</p>}
+
+            <button type="submit" className="auth-primary gold-btn" disabled={!password || !confirmPassword || loading}>
+              {loading ? <><Loader2 size={16} className="animate-spin" /> Resetting Password...</> : 'Reset Password'}
+            </button>
+          </form>
+        </>
+      )}
+
+      {step === 'SUCCESS' && (
+        <div style={{ textAlign: 'center', padding: '16px 0' }}>
+          <div style={{ fontSize: 42, marginBottom: 8 }}>✅</div>
+          <h2 style={{ margin: '0 0 8px', fontSize: 18, color: '#166534' }}>Password Reset Successfully</h2>
+          <p style={{ fontSize: 13, color: '#4b5563', margin: '0 0 16px', lineHeight: 1.5 }}>
+            Password reset successfully. You can now log in with your email and new password.
+          </p>
+          <button type="button" className="auth-primary gold-btn" onClick={() => n('/delivery/signin')}>
+            Sign In Now →
           </button>
         </div>
       )}
@@ -1324,7 +1525,7 @@ export function DeliveryResetPasswordPage() {
         setError(res.message || 'Failed to reset password. The link might be expired.');
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      setError(err.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -1350,7 +1551,7 @@ export function DeliveryResetPasswordPage() {
       {success ? (
         <div style={{ textAlign: 'center', padding: '12px 0' }}>
           <p style={{ fontSize: 13, color: '#166534', background: '#f0fdf4', padding: '12px', borderRadius: 10, border: '1px solid #bbf7d0' }}>
-            ✓ Your password has been successfully reset!
+            ✓ Password reset successfully. You can now log in with your email and new password.
           </p>
           <button type="button" className="auth-primary gold-btn" onClick={() => n('/delivery/signin')} style={{ marginTop: 12 }}>
             Sign In Now
@@ -1392,10 +1593,11 @@ export function DeliveryResetPasswordPage() {
           <ErrorBox msg={error} />
 
           <button type="submit" className="auth-primary gold-btn" disabled={!password || !confirmPassword || loading}>
-            {loading ? <Loader2 size={16} className="animate-spin" /> : 'Reset Password'}
+            {loading ? <><Loader2 size={16} className="animate-spin" /> Resetting Password...</> : 'Reset Password'}
           </button>
         </form>
       )}
     </DeliveryFrame>
   );
 }
+
