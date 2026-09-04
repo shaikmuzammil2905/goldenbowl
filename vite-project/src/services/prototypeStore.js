@@ -188,8 +188,8 @@ export async function addProduct(product) {
     addNotification('support', 'Product added', `${product.name} was added to the database & menu.`);
     return res?.data || res;
   } catch (err) {
-    console.error('[AWS RDS Database Error - addProduct]:', { endpoint: '/products', method: 'POST', payload: apiPayload, error: err.message });
-    throw new Error(`Failed to save product to AWS RDS PostgreSQL database: ${err.message}`);
+    console.error('[Product API Error - addProduct]:', err.message);
+    throw err;
   }
 }
 
@@ -205,8 +205,8 @@ export async function updateProduct(productId, changes) {
     await syncWithBackend();
     return res?.data || res;
   } catch (err) {
-    console.error('[AWS RDS Database Error - updateProduct]:', { endpoint: `/products/${productId}`, method: 'PUT', payload: apiPayload, error: err.message });
-    throw new Error(`Failed to update product in AWS RDS PostgreSQL database: ${err.message}`);
+    console.error('[Product API Error - updateProduct]:', err.message);
+    throw err;
   }
 }
 
@@ -218,8 +218,8 @@ export async function toggleProductAvailability(productId) {
     await apiClient(`/products/${productId}/toggle-availability`, { method: 'PATCH' });
     await syncWithBackend();
   } catch (err) {
-    console.error('[AWS RDS Database Error - toggleProductAvailability]:', { endpoint: `/products/${productId}/toggle-availability`, method: 'PATCH', error: err.message });
-    throw new Error(`Failed to toggle availability in AWS RDS PostgreSQL database: ${err.message}`);
+    console.error('[Product API Error - toggleProductAvailability]:', err.message);
+    throw err;
   }
 }
 
@@ -228,8 +228,8 @@ export async function deleteProduct(productId) {
     await apiClient(`/products/${productId}`, { method: 'DELETE' });
     await syncWithBackend();
   } catch (err) {
-    console.error('[AWS RDS Database Error - deleteProduct]:', { endpoint: `/products/${productId}`, method: 'DELETE', error: err.message });
-    throw new Error(`Failed to delete product from AWS RDS PostgreSQL database: ${err.message}`);
+    console.error('[Product API Error - deleteProduct]:', err.message);
+    throw err;
   }
 }
 
@@ -242,8 +242,8 @@ export async function addCategory(category) {
     await syncWithBackend();
     return id;
   } catch (err) {
-    console.error('[AWS RDS Database Error - addCategory]:', { endpoint: '/categories', method: 'POST', payload: newCat, error: err.message });
-    throw new Error(`Failed to add category to AWS RDS PostgreSQL database: ${err.message}`);
+    console.error('[Category API Error - addCategory]:', err.message);
+    throw err;
   }
 }
 

@@ -28,38 +28,40 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
 
   const token = authHeader.split(' ')[1];
 
-  // 1. Prototype / Development Token Check (Prioritize before JWT verify)
-  if (token.startsWith('token-') || token === 'token-admin-goldenbowl' || env.NODE_ENV === 'development') {
-    const roleHeader = ((req.headers['x-user-role'] as string)?.toUpperCase() as UserRole) || 'ADMIN';
-    const emailHeader = (req.headers['x-user-email'] as string) || 'admin@goldenbowl.com';
+  // 1. Prototype / Development Token Check
+  if (env.NODE_ENV === 'development') {
+    if (token.startsWith('token-') || token === 'token-admin-goldenbowl') {
+      const roleHeader = ((req.headers['x-user-role'] as string)?.toUpperCase() as UserRole) || 'ADMIN';
+      const emailHeader = (req.headers['x-user-email'] as string) || 'admin@goldenbowl.com';
 
-    try {
-      let user = await prisma.user.findFirst({ where: { email: emailHeader } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            email: emailHeader,
-            name: 'Golden Admin',
-            role: roleHeader,
-          },
-        });
+      try {
+        let user = await prisma.user.findFirst({ where: { email: emailHeader } });
+        if (!user) {
+          user = await prisma.user.create({
+            data: {
+              email: emailHeader,
+              name: 'Golden Admin',
+              role: roleHeader,
+            },
+          });
+        }
+
+        req.user = {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role as UserRole,
+        };
+        return next();
+      } catch (err: any) {
+        req.user = {
+          id: 'admin-fallback',
+          email: emailHeader,
+          name: 'Admin User',
+          role: roleHeader,
+        };
+        return next();
       }
-
-      req.user = {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role as UserRole,
-      };
-      return next();
-    } catch (err: any) {
-      req.user = {
-        id: 'admin-fallback',
-        email: emailHeader,
-        name: 'Admin User',
-        role: roleHeader,
-      };
-      return next();
     }
   }
 
@@ -95,15 +97,10 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
       return next();
     } catch (error: any) {
       logger.warn('Cognito JWT verification error:', error.message);
+      return next(new UnauthorizedError('Invalid or expired token'));
     }
   }
 
-  // Default Fallback User
-  req.user = {
-    id: 'admin-fallback',
-    email: 'admin@goldenbowl.com',
-    name: 'Admin User',
-    role: 'ADMIN',
-  };
-  return next();
+  // If no verifier is configured but we are in production, block access
+  return next(new UnauthorizedError('Authentication service is unavailable or not configured.'));
 }

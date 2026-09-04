@@ -18,10 +18,18 @@ export async function apiClient(endpoint, { method = 'GET', body = null, headers
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${API_BASE_URL}${cleanEndpoint}${method === 'GET' ? (cleanEndpoint.includes('?') ? `&_t=${Date.now()}` : `?_t=${Date.now()}`) : ''}`;
 
-  const customerAuth = authStorage.getCustomerAuth();
-  const token = customerAuth?.token || 'token-admin-goldenbowl';
-  const role = customerAuth?.role ? customerAuth.role.toUpperCase() : 'ADMIN';
-  const email = customerAuth?.email || 'admin@goldenbowl.com';
+  // Resolve token based on active role
+  const activeRole = authStorage.getAnyActiveRole();
+  let user = null;
+  
+  if (activeRole === 'customer') user = authStorage.getCustomerUser();
+  else if (activeRole === 'admin') user = authStorage.getAdminUser();
+  else if (activeRole === 'support') user = authStorage.getSupportUser();
+  else if (activeRole === 'delivery') user = authStorage.getDeliveryUser();
+
+  const token = user?.token || user?.accessToken || '';
+  const role = user?.role ? user.role.toUpperCase() : (activeRole ? activeRole.toUpperCase() : 'CUSTOMER');
+  const email = user?.email || 'guest@goldenbowl.com';
 
   const config = {
     method,
@@ -42,13 +50,33 @@ export async function apiClient(endpoint, { method = 'GET', body = null, headers
     const response = await fetch(url, config);
 
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        if (typeof window !== 'undefined') {
+          const isCustomer = window.location.pathname.startsWith('/customer') || window.location.pathname === '/';
+          if (!isCustomer) {
+             const activeRole = authStorage.getAnyActiveRole();
+             if (activeRole === 'admin') authStorage.clearAdminAuth();
+             if (activeRole === 'support') authStorage.clearSupportAuth();
+             if (activeRole === 'delivery') authStorage.clearDeliveryAuth();
+             if (activeRole === 'customer') authStorage.clearCustomerAuth();
+             
+             // Trigger event for UI to catch and redirect
+             window.dispatchEvent(new CustomEvent('auth-expired'));
+          }
+        }
+      }
+
       let errorMessage = `Request failed with status ${response.status}`;
       try {
         const errorData = await response.json();
         if (errorData?.message) errorMessage = errorData.message;
       } catch {
         // Non-JSON response (e.g. 404 HTML from proxy)
-        if (response.status === 404) {
+        if (response.status === 401) {
+          errorMessage = 'Your session has expired. Please sign in again.';
+        } else if (response.status === 403) {
+          errorMessage = 'You do not have permission to perform this action.';
+        } else if (response.status === 404) {
           errorMessage = 'The requested service endpoint is unavailable. Please check backend connection.';
         } else if (response.status >= 500) {
           errorMessage = 'The server encountered an error. Please try again in a few moments.';
