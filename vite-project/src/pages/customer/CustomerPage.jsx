@@ -2,8 +2,9 @@ import React from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Bell, Search, MapPin, Star, Plus, CheckCircle2, CreditCard, LogOut, Minus, Trash2, Calendar, Clock, ShieldCheck, Loader2, Smartphone, Building2, Wallet, Banknote } from 'lucide-react'
 import { branches } from '../../data/mockData'
-import { createOrder } from '../../services/prototypeStore'
 import { usePrototypeContext } from '../../context/PrototypeContext'
+import { orderApi } from '../../services/api/orderApi'
+import { addressApi } from '../../services/api/addressApi'
 import { NotificationPanel } from '../../components/notifications/NotificationPanel'
 import { openRazorpayCheckout, RAZORPAY_KEY_ID } from '../../services/razorpay'
 import { authStorage } from '../../services/storage/authStorage'
@@ -319,7 +320,45 @@ function Categories(){const {categories}=usePrototypeContext();return <><p>Choos
 function Product({id}){const {products}=usePrototypeContext();const p=products.find(x=>String(x.id)===id)||products[0];if(!p)return null;return <Page title={p.name}><div className="route-detail-image"><FoodImage src={p.image} alt={p.name}/></div><span className="route-pill">{p.available!==false?'Available':'Currently Unavailable'}</span><h1>{p.name}</h1><div className="route-rating"><Star size={14} fill="currentColor"/> {p.rating||4.5} rating</div><p>{p.description||'Deliciously prepared food bowl.'}</p><div className="route-nutrition"><b>{p.portion||'450g'}<small>Portion</small></b><b>{p.calories||650}<small>Calories</small></b><b>{p.ingredients?.length||4}<small>Ingredients</small></b></div>{p.ingredients&&p.ingredients.length>0&&<><h2>Ingredients</h2><div className="ingredient-chips">{p.ingredients.map(i=><span key={i}>{i}</span>)}</div></>}<button type="button" className="route-primary" onClick={()=>{addProduct(p);window.location.href='/customer/cart'}}>Add to Cart • ₹{p.price}</button></Page>}
 function Cart(){const navigate=useNavigate();const {products,deliverySettings}=usePrototypeContext();const [items,setItems]=React.useState(readCart);const detailed=items.map(i=>({...i,product:products.find(p=>p.id===i.productId)})).filter(i=>i.product);const update=(id,d)=>{const next=items.map(i=>i.productId===id?{...i,quantity:i.quantity+d}:i).filter(i=>i.quantity>0);setItems(next);saveCart(next)};const customerDeliveryFee=Number(deliverySettings?.customerDeliveryFee??0);const subtotal=detailed.reduce((s,i)=>s+i.product.price*i.quantity,0),delivery=subtotal?customerDeliveryFee:0,taxes=Math.round(subtotal*.05),total=subtotal+delivery+taxes;if(!detailed.length)return <div className="route-success"><h1>Your cart is empty</h1><p>Choose dishes from the menu to continue.</p><Link className="route-primary" to="/customer/categories">Explore Menu</Link></div>;return <><div>{detailed.map(i=><div className="route-cart-item" key={i.productId}><span className="route-cart-image"><FoodImage src={i.product.image} alt={i.product.name}/></span><div><strong>{i.product.name}</strong><small>{money(i.product.price)} • Qty {i.quantity}</small><div style={{display:'flex',gap:6,marginTop:8}}><button type="button" onClick={()=>update(i.productId,-1)}><Minus size={13}/></button><button type="button" onClick={()=>update(i.productId,1)}><Plus size={13}/></button><button type="button" onClick={()=>update(i.productId,-i.quantity)}><Trash2 size={13}/></button></div></div><strong>{money(i.product.price*i.quantity)}</strong></div>)}</div><div className="route-summary"><span>Subtotal <b>{money(subtotal)}</b></span><span>Delivery <b style={{color:delivery===0?'#16a34a':'inherit'}}>{delivery===0?'FREE (₹0)':money(delivery)}</b></span><span>Taxes <b>{money(taxes)}</b></span><hr/><span>Total <b>{money(total)}</b></span></div><button type="button" className="route-primary" onClick={()=>{localStorage.setItem(CHECKOUT_KEY,JSON.stringify({items,subtotal,delivery,taxes,total}));navigate('/customer/checkout')}}>Proceed to Checkout</button></>}
 
-function Checkout(){const navigate=useNavigate();const [type,setType]=React.useState('Delivery');const [branch,setBranch]=React.useState(branches[0]?.id||1);const [address,setAddress]=React.useState('Home');const cart=(()=>{try{return JSON.parse(localStorage.getItem(CHECKOUT_KEY))||null}catch{return null}})();if(!cart)return <div className="route-success"><h1>Your checkout is empty</h1><Link className="route-primary" to="/customer/cart">Back to Cart</Link></div>;const selectedBranch=branches.find(b=>b.id===branch)||branches[0];return <><h2>Order type</h2><div className="route-segment"><button type="button" className={type==='Delivery'?'active':''} onClick={()=>setType('Delivery')}>🚚 Delivery</button><button type="button" className={type==='Pickup'?'active':''} onClick={()=>setType('Pickup')}>🏪 Pickup</button></div><h2>Branch</h2>{branches.map(b=><button type="button" className="route-card" key={b.id} onClick={()=>setBranch(b.id)} style={{width:'100%',textAlign:'left',borderColor:b.id===branch?'#b4811d':undefined}}><span>🏪</span><span>{b.name}<small>{b.distance}</small></span><b>{b.id===branch?'✓':'›'}</b></button>)}{type==='Delivery'&&<><h2>Delivery address</h2><button type="button" className="route-card" onClick={()=>setAddress(address==='Home'?'Work':'Home')} style={{width:'100%',textAlign:'left'}}><MapPin/><span>{address}<small>{address==='Home'?'42, 5th Main Road, Bengaluru':'12, MG Road, Bengaluru'}</small></span><b>Change</b></button></>}<h2>Order total</h2><div className="route-summary"><span>Total <b>{money(cart.total)}</b></span></div><button type="button" className="route-primary" onClick={()=>{localStorage.setItem(CHECKOUT_KEY,JSON.stringify({...cart,type,branch:selectedBranch.id,address}));navigate('/customer/payment')}}>Continue to Payment</button></>}
+function Checkout(){
+  const navigate=useNavigate();
+  const [type,setType]=React.useState('Delivery');
+  const [branch,setBranch]=React.useState(branches[0]?.id||1);
+  const [address,setAddress]=React.useState(null);
+  const [addresses, setAddresses] = React.useState([]);
+  
+  const customerUser = authStorage.getCustomerUser() || {};
+  
+  React.useEffect(() => {
+    if (customerUser?.id) {
+      addressApi.getAddresses(customerUser.id).then(res => {
+        if (res?.data?.length) {
+          setAddresses(res.data);
+          const defaultAddr = res.data.find(a => a.isDefault) || res.data[0];
+          setAddress(defaultAddr);
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
+  const cart=(()=>{try{return JSON.parse(localStorage.getItem(CHECKOUT_KEY))||null}catch{return null}})();
+  if(!cart)return <div className="route-success"><h1>Your checkout is empty</h1><Link className="route-primary" to="/customer/cart">Back to Cart</Link></div>;
+  const selectedBranch=branches.find(b=>b.id===branch)||branches[0];
+  
+  const handleAddressChange = () => {
+    if (!addresses.length) return;
+    const currentIndex = addresses.findIndex(a => a.id === address?.id);
+    const nextIndex = (currentIndex + 1) % addresses.length;
+    setAddress(addresses[nextIndex]);
+  };
+
+  return <><h2>Order type</h2><div className="route-segment"><button type="button" className={type==='Delivery'?'active':''} onClick={()=>setType('Delivery')}>🚚 Delivery</button><button type="button" className={type==='Pickup'?'active':''} onClick={()=>setType('Pickup')}>🏪 Pickup</button></div><h2>Branch</h2>{branches.map(b=><button type="button" className="route-card" key={b.id} onClick={()=>setBranch(b.id)} style={{width:'100%',textAlign:'left',borderColor:b.id===branch?'#b4811d':undefined}}><span>🏪</span><span>{b.name}<small>{b.distance}</small></span><b>{b.id===branch?'✓':'›'}</b></button>)}{type==='Delivery'&&<><h2>Delivery address</h2>
+  {address ? (
+    <button type="button" className="route-card" onClick={handleAddressChange} style={{width:'100%',textAlign:'left'}}><MapPin/><span>{address.type}<small>{address.address}</small></span><b>Change</b></button>
+  ) : (
+    <div style={{padding: '12px', background: '#fff', border: '1px solid #eee4d2', borderRadius: '12px', fontSize: '12px', color: '#78716c'}}>No saved addresses. Please add one in your profile.</div>
+  )}
+  </>}<h2>Order total</h2><div className="route-summary"><span>Total <b>{money(cart.total)}</b></span></div><button type="button" className="route-primary" onClick={()=>{localStorage.setItem(CHECKOUT_KEY,JSON.stringify({...cart,type,branch:selectedBranch.id,address: address?.address, addressType: address?.type}));navigate('/customer/payment')}}>Continue to Payment</button></>}
 function Payment() {
   const navigate = useNavigate();
   const { branches: storeBranches } = usePrototypeContext();
@@ -356,23 +395,25 @@ function Payment() {
   const customerEmail = sessionStorage.getItem('bowlCustomerEmail') || customerUser.email || '';
   const customerMobile = sessionStorage.getItem('bowlCustomerMobile') || customerUser.mobile || '';
 
-  const finalizeOrder = (paymentData = {}) => {
-    const order = createOrder({
-      items: cart.items,
-      total: cart.total,
-      type: cart.type || 'Delivery',
-      branch: branch?.name || 'Golden Food Bowl',
-      customer: customerName,
-      paymentMethod: method === 'COD' ? 'Cash on Delivery' : `Razorpay (${method})`,
-      paymentId: paymentData.paymentId || `TXN_${Date.now()}`,
-      razorpayPaymentId: paymentData.paymentId || null,
-      paymentStatus: 'PAID',
-      driver: null,
-      eta: cart.type === 'Delivery' ? 30 : 0,
-    });
-    localStorage.removeItem(CART_KEY);
-    localStorage.removeItem(CHECKOUT_KEY);
-    navigate(`/customer/order-success?order=${order.id}`);
+  const finalizeOrder = async (paymentData = {}) => {
+    try {
+      const orderRes = await orderApi.createOrder({
+        items: cart.items.map(i => ({ productId: i.productId, quantity: i.quantity })),
+        totalAmount: cart.total,
+        orderType: cart.type || 'Delivery',
+        branchId: branch?.id || 1,
+        customerName: customerName,
+        deliveryAddress: cart.address,
+        addressType: cart.addressType || 'Home'
+      });
+      const order = orderRes.data || orderRes;
+      localStorage.removeItem(CART_KEY);
+      localStorage.removeItem(CHECKOUT_KEY);
+      navigate(`/customer/order-success?order=${order.id}`);
+    } catch (err) {
+      alert("Failed to create order");
+      setIsProcessing(false);
+    }
   };
 
   const handlePay = () => {
@@ -713,24 +754,37 @@ function Profile() {
   const customerUser = authStorage.getCustomerUser() || {}
   const [user, setUser] = React.useState(() => {
     return {
+      id: customerUser.id,
       name: sessionStorage.getItem('bowlCustomerName') || customerUser.name || 'Customer Account',
       email: sessionStorage.getItem('bowlCustomerEmail') || customerUser.email || 'customer@goldenbowl.com',
       phone: sessionStorage.getItem('bowlCustomerMobile') || customerUser.mobile || '+91 98765 00000',
     }
   })
-  const [addresses, setAddresses] = React.useState([
-    { id: 1, type: 'Home', address: '42, 5th Main Road, Indiranagar, Bengaluru - 560038', isDefault: true },
-    { id: 2, type: 'Work', address: '12, MG Road, Tech Park, Bengaluru - 560001', isDefault: false },
-  ])
+  const [addresses, setAddresses] = React.useState([])
 
-  const handleAddAddress = () => {
-    const newAddr = {
-      id: Date.now(),
-      type: 'Other',
-      address: '7th Cross, Koramangala, Bengaluru - 560095',
-      isDefault: false
+  React.useEffect(() => {
+    if (user.id) {
+      addressApi.getAddresses(user.id).then(res => {
+        if (res?.data) setAddresses(res.data)
+      }).catch(err => console.error(err));
     }
-    setAddresses(prev => [...prev, newAddr])
+  }, [user.id])
+
+  const handleAddAddress = async () => {
+    const newAddrText = window.prompt("Enter new address:")
+    if (!newAddrText) return;
+    const type = window.prompt("Address type (Home, Work, Other):", "Other") || "Other"
+    
+    if (user.id) {
+      try {
+        const res = await addressApi.createAddress(user.id, { type, address: newAddrText, isDefault: addresses.length === 0 });
+        if (res?.data) {
+          setAddresses(prev => [res.data, ...prev])
+        }
+      } catch (err) {
+        alert("Failed to save address");
+      }
+    }
   }
   const [paymentMethods] = React.useState([
     { id: 1, type: 'UPI', name: 'Google Pay', detail: 'priya@okicici', isDefault: true },

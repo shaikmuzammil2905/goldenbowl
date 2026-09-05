@@ -33,6 +33,8 @@ export class OrderController {
         customerName: req.body.customerName || req.user?.name || 'Guest',
         branchId: req.body.branchId,
         orderType: req.body.orderType,
+        deliveryAddress: req.body.deliveryAddress,
+        addressType: req.body.addressType,
         items: req.body.items,
       });
       res.status(201).json({ success: true, message: 'Order created', data: order });

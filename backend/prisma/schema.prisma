@@ -71,8 +71,22 @@ model User {
   deliveryProfile  DeliveryPartner?
   notifications    Notification[]
   auditLogs        AuditLog[]
+  savedAddresses   SavedAddress[]
 
   @@map("users")
+}
+
+model SavedAddress {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   @default("Other")
+  address   String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("saved_addresses")
 }
 
 model Branch {
@@ -134,10 +148,12 @@ model Order {
   driverId      String?
   driver        DeliveryPartner? @relation(fields: [driverId], references: [id], onDelete: SetNull)
   customerName  String
-  totalAmount   Decimal          @db.Decimal(10, 2)
-  status        OrderStatus      @default(CONFIRMED)
-  orderType     String           @default("Delivery")
-  etaMinutes    Int              @default(25)
+  totalAmount     Decimal          @db.Decimal(10, 2)
+  status          OrderStatus      @default(CONFIRMED)
+  orderType       String           @default("Delivery")
+  deliveryAddress String?
+  addressType     String?
+  etaMinutes      Int              @default(25)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   items         OrderItem[]

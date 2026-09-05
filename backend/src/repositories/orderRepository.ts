@@ -35,6 +35,8 @@ export class OrderRepository {
     customerName: string;
     totalAmount: number;
     orderType: string;
+    deliveryAddress?: string;
+    addressType?: string;
     items: { productId: number; quantity: number; unitPrice: number; subtotal: number }[];
   }) {
     return prisma.order.create({
@@ -45,6 +47,8 @@ export class OrderRepository {
         customerName: data.customerName,
         totalAmount: data.totalAmount,
         orderType: data.orderType,
+        deliveryAddress: data.deliveryAddress,
+        addressType: data.addressType,
         items: {
           create: data.items,
         },
