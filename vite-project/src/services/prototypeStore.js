@@ -27,11 +27,7 @@ const defaultState = {
     { id: 'u3', name: 'Ananya Roy', mobile: '9765432109', email: 'ananya@outlook.com', provider: 'Mobile OTP', createdAt: '2026-08-18', ordersCount: 5, spent: 1620 },
     { id: 'u4', name: 'Karan Patel', mobile: '9988776655', email: 'karan.p@yahoo.com', provider: 'Email', createdAt: '2026-08-17', ordersCount: 3, spent: 980 }
   ],
-  deliveryPartners: [
-    { id: 'dp1', name: 'Rahul Kumar', mobile: '9876543210', vehicle: 'Bike', verificationStatus: 'VERIFIED', documentsVerified: true, fee: 499, feeStatus: 'PAID', trips: 142, rating: 4.9, earnings: 1450 },
-    { id: 'dp2', name: 'Vikram Singh', mobile: '9812345678', vehicle: 'Scooter', verificationStatus: 'VERIFIED', documentsVerified: true, fee: 499, feeStatus: 'PAID', trips: 98, rating: 4.8, earnings: 1120 },
-    { id: 'dp3', name: 'Suresh Patel', mobile: '9765432109', vehicle: 'Electric Vehicle', verificationStatus: 'PENDING', documentsVerified: false, fee: 499, feeStatus: 'PENDING', trips: 0, rating: 5.0, earnings: 0 }
-  ],
+  deliveryPartners: [],
   deliverySettings: {
     onboardingFee: 499,
     kitFee: 350,

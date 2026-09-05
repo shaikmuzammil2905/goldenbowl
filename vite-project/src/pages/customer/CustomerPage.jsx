@@ -354,7 +354,7 @@ function Checkout(){
 
   return <><h2>Order type</h2><div className="route-segment"><button type="button" className={type==='Delivery'?'active':''} onClick={()=>setType('Delivery')}>🚚 Delivery</button><button type="button" className={type==='Pickup'?'active':''} onClick={()=>setType('Pickup')}>🏪 Pickup</button></div><h2>Branch</h2>{branches.map(b=><button type="button" className="route-card" key={b.id} onClick={()=>setBranch(b.id)} style={{width:'100%',textAlign:'left',borderColor:b.id===branch?'#b4811d':undefined}}><span>🏪</span><span>{b.name}<small>{b.distance}</small></span><b>{b.id===branch?'✓':'›'}</b></button>)}{type==='Delivery'&&<><h2>Delivery address</h2>
   {address ? (
-    <button type="button" className="route-card" onClick={handleAddressChange} style={{width:'100%',textAlign:'left'}}><MapPin/><span>{address.type}<small>{address.address}</small></span><b>Change</b></button>
+    <button type="button" className="route-card" onClick={handleAddressChange} style={{width:'100%',textAlign:'left'}}><MapPin/><span>{address.type}<small>{(()=>{try{const p=JSON.parse(address.address);return p.addressLine+(p.area?`, ${p.area}`:'')}catch{return address.address}})()}</small></span><b>Change</b></button>
   ) : (
     <div style={{padding: '12px', background: '#fff', border: '1px solid #eee4d2', borderRadius: '12px', fontSize: '12px', color: '#78716c'}}>No saved addresses. Please add one in your profile.</div>
   )}
@@ -747,7 +747,7 @@ function OrderDetail({id}) {
     </>
   )
 }
-function Tracking({id}){const {orders}=usePrototypeContext();const o=orders.find(x=>x.id===id)||orders[0];const driverName=o?.driver||'Assigned Partner';const initials=driverName.split(' ').map(x=>x[0]).join('').slice(0,2);return <><div className="route-map">🛵<span>• • • • •</span>🏠</div><h1>Arriving in {o?.eta||25} min</h1><p>Order #{o?.id} • {o?.status?.replaceAll('_',' ')}</p><div className="route-driver"><span>{initials}</span><div><strong>{driverName}</strong><small>Delivery partner</small></div><button type="button">Call</button></div></>}
+function Tracking({id}){const {orders}=usePrototypeContext();const o=orders.find(x=>x.id===id)||orders[0];const driverName=o?.driver||'Assigned Partner';const initials=driverName.split(' ').map(x=>x[0]).join('').slice(0,2);return <><div className="route-map">🛵<span>• • • • •</span>🏠</div><h1>Arriving in {o?.eta||25} min</h1><p>Order #{o?.id} • {o?.status?.replaceAll('_',' ')}</p><div className="route-driver"><span>{initials}</span><div><strong>{driverName}</strong><small>Delivery partner</small></div><a href={`tel:${o?.driverMobile||'9999999999'}`} style={{background:'#1c1917',color:'#f5c518',padding:'6px 16px',borderRadius:16,textDecoration:'none',fontSize:12,fontWeight:800}}>Call</a></div></>}
 function Profile() {
   const navigate = useNavigate()
   const [activeModal, setActiveModal] = React.useState(null)
@@ -770,20 +770,57 @@ function Profile() {
     }
   }, [user.id])
 
-  const handleAddAddress = async () => {
-    const newAddrText = window.prompt("Enter new address:")
-    if (!newAddrText) return;
-    const type = window.prompt("Address type (Home, Work, Other):", "Other") || "Other"
+  const [editingAddress, setEditingAddress] = React.useState(null)
+
+  const handleSaveAddress = async (e) => {
+    e.preventDefault()
+    if (!user.id) return;
     
-    if (user.id) {
-      try {
-        const res = await addressApi.createAddress(user.id, { type, address: newAddrText, isDefault: addresses.length === 0 });
+    const formData = new FormData(e.target)
+    const addrData = {
+      name: formData.get('name'),
+      phone: formData.get('phone'),
+      addressLine: formData.get('addressLine'),
+      area: formData.get('area'),
+      city: formData.get('city'),
+      state: formData.get('state'),
+      postalCode: formData.get('postalCode')
+    }
+    const type = formData.get('type') || 'Other'
+    
+    try {
+      if (editingAddress.id) {
+        const res = await addressApi.updateAddress(user.id, editingAddress.id, {
+          type,
+          address: JSON.stringify(addrData),
+          isDefault: editingAddress.isDefault
+        })
+        if (res?.data) {
+          setAddresses(prev => prev.map(a => a.id === res.data.id ? res.data : a))
+        }
+      } else {
+        const res = await addressApi.createAddress(user.id, {
+          type,
+          address: JSON.stringify(addrData),
+          isDefault: addresses.length === 0
+        })
         if (res?.data) {
           setAddresses(prev => [res.data, ...prev])
         }
-      } catch (err) {
-        alert("Failed to save address");
       }
+      setEditingAddress(null)
+    } catch (err) {
+      alert("Failed to save address");
+    }
+  }
+
+  const handleDeleteAddress = async (id) => {
+    if (!user.id || !window.confirm("Delete this address?")) return;
+    try {
+      await addressApi.deleteAddress(user.id, id);
+      setAddresses(prev => prev.filter(a => a.id !== id));
+    } catch (err) {
+      alert("Failed to delete address");
     }
   }
   const [paymentMethods] = React.useState([
@@ -901,7 +938,7 @@ function Profile() {
       )}
 
       {/* Addresses Modal */}
-      {activeModal === 'addresses' && (
+      {activeModal === 'addresses' && !editingAddress && (
         <div className="branch-modal-overlay" onClick={() => setActiveModal(null)}>
           <div className="branch-modal" onClick={e => e.stopPropagation()}>
             <div className="branch-modal-head">
@@ -909,24 +946,78 @@ function Profile() {
               <button type="button" className="close-btn" onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div className="branch-modal-list">
-              {addresses.map(a => (
-                <div key={a.id} className="branch-option selected" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                    <strong>📍 {a.type}</strong>
-                    {a.isDefault && <span className="offer-badge" style={{ fontSize: 8 }}>DEFAULT</span>}
+              {addresses.map(a => {
+                let parsed = { addressLine: a.address };
+                try { parsed = JSON.parse(a.address) } catch(e) {}
+                return (
+                  <div key={a.id} className="branch-option selected" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                      <strong>📍 {a.type}</strong>
+                      <div style={{display:'flex',gap:6}}>
+                        <button type="button" style={{fontSize:10,padding:'2px 8px',borderRadius:8,border:'1px solid #ddd',background:'#fff'}} onClick={() => setEditingAddress(a)}>Edit</button>
+                        <button type="button" style={{fontSize:10,padding:'2px 8px',borderRadius:8,border:'1px solid #fee2e2',background:'#fef2f2',color:'#b91c1c'}} onClick={() => handleDeleteAddress(a.id)}>Delete</button>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#444', display:'flex',flexDirection:'column',gap:2 }}>
+                      {parsed.name && <strong>{parsed.name} • {parsed.phone}</strong>}
+                      <span>{parsed.addressLine}</span>
+                      {parsed.area && <span>{parsed.area}, {parsed.city} - {parsed.postalCode}</span>}
+                    </div>
                   </div>
-                  <span style={{ fontSize: 10, color: '#666' }}>{a.address}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
             <button 
               type="button" 
               className="route-secondary" 
               style={{ marginTop: 10, width: '100%' }}
-              onClick={handleAddAddress}
+              onClick={() => setEditingAddress({})}
             >
               + Add New Address
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Address Form Modal */}
+      {editingAddress && (
+        <div className="branch-modal-overlay" onClick={() => setEditingAddress(null)}>
+          <div className="branch-modal" onClick={e => e.stopPropagation()}>
+            <div className="branch-modal-head">
+              <h3>{editingAddress.id ? 'Edit Address' : 'Add New Address'}</h3>
+              <button type="button" className="close-btn" onClick={() => setEditingAddress(null)}>✕</button>
+            </div>
+            <form onSubmit={handleSaveAddress} className="profile-form" style={{maxHeight:'60vh',overflowY:'auto',paddingRight:4}}>
+              {(() => {
+                let parsed = {};
+                if(editingAddress.id) {
+                  try { parsed = JSON.parse(editingAddress.address) } catch(e) { parsed = { addressLine: editingAddress.address } }
+                }
+                return (
+                  <>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                      <label><span>Label</span>
+                        <select name="type" defaultValue={editingAddress.type || 'Home'} style={{width:'100%',padding:10,borderRadius:10,border:'1px solid #ddd',background:'#f9f9f9'}}>
+                          <option value="Home">Home</option>
+                          <option value="Work">Work</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </label>
+                      <label><span>Postal Code</span><input type="text" name="postalCode" defaultValue={parsed.postalCode} required placeholder="560001"/></label>
+                    </div>
+                    <label><span>Full Name</span><input type="text" name="name" defaultValue={parsed.name} required /></label>
+                    <label><span>Phone Number</span><input type="tel" name="phone" defaultValue={parsed.phone} required /></label>
+                    <label><span>Address Line</span><input type="text" name="addressLine" defaultValue={parsed.addressLine} required placeholder="Flat, House no, Building"/></label>
+                    <label><span>Area / Locality</span><input type="text" name="area" defaultValue={parsed.area} required placeholder="Indiranagar"/></label>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                      <label><span>City</span><input type="text" name="city" defaultValue={parsed.city||'Bengaluru'} required /></label>
+                      <label><span>State</span><input type="text" name="state" defaultValue={parsed.state||'Karnataka'} required /></label>
+                    </div>
+                    <button type="submit" className="route-primary" style={{marginTop:10}}>Save Address</button>
+                  </>
+                )
+              })()}
+            </form>
           </div>
         </div>
       )}
