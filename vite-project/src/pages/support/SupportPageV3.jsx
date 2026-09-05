@@ -54,7 +54,7 @@ export function SupportPageV3() {
 
 function Dashboard({ state }) {
   const openOrders = state.orders.filter(o => o.status !== 'DELIVERED').length
-  const openIssues = state.issues ? state.issues.filter(i => i.status !== 'RESOLVED').length : 3
+  const openIssues = state.issues ? state.issues.filter(i => i.status !== 'RESOLVED').length : 0
 
   return (
     <>
@@ -544,12 +544,7 @@ function Issues({ issues }) {
   const [priority, setPriority] = useState('Normal')
   const [filterPriority, setFilterPriority] = useState('ALL')
 
-  const rows = issues && issues.length ? issues : [
-    { id: 'TKT-901', orderId: 'BWL10301', customer: 'Priya Sharma', subject: 'Delayed delivery due to heavy rain', priority: 'High', status: 'OPEN' },
-    { id: 'TKT-902', orderId: 'BWL10302', customer: 'Rahul Verma', subject: 'Missing drink item in package', priority: 'Urgent', status: 'OPEN' },
-    { id: 'TKT-903', orderId: 'BWL10303', customer: 'Ananya Roy', subject: 'Refund query for cancelled order', priority: 'Normal', status: 'IN_PROGRESS' },
-    { id: 'TKT-904', orderId: 'BWL10304', customer: 'Karan Patel', subject: 'Address update requested', priority: 'Low', status: 'RESOLVED' },
-  ]
+  const rows = issues && issues.length ? issues : []
 
   const filteredRows = rows.filter(r => filterPriority === 'ALL' || r.priority.toUpperCase() === filterPriority.toUpperCase())
 
@@ -615,7 +610,17 @@ function Issues({ issues }) {
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map(i => (
+            {filteredRows.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <Headphones size={32} style={{ opacity: 0.3 }} />
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>No support tickets</span>
+                    <span style={{ fontSize: 11 }}>Customer tickets will appear here in real time.</span>
+                  </div>
+                </td>
+              </tr>
+            ) : filteredRows.map(i => (
               <tr key={i.id}>
                 <td>
                   <strong>#{i.id}</strong>

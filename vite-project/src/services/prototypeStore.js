@@ -4,29 +4,27 @@ import { apiClient } from './api/apiClient'
 const STORAGE_KEY = 'goldbowl-prototype-state'
 const makeId = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
+const mockOrderIds = new Set([
+  'BWL10245', 'BWL10244', 'BWL10243', 'BWL96462', 'BWL96461',
+  'BWL96460', 'BWL96450', 'BWL96449', 'BWL96448'
+]);
+const mockCustomerNames = new Set([
+  'Priya Sharma', 'Arjun Rao', 'Meera Nair', 'Rohan Gupta', 'Siddharth Rao'
+]);
+
 const defaultState = {
-  orders: initialOrders,
+  orders: [],
   branches,
   products,
   categories,
   notifications: [
     { id: 'n1', role: 'customer', title: '🎉 Welcome to Golden Food Bowl', message: 'Your favourite food bowls are ready for order with 50% OFF promo code GOLDEN50.', createdAt: new Date().toISOString() },
-    { id: 'n2', role: 'admin', title: '📈 High Demand Surge Alert', message: 'Koramangala branch volume increased +34% in the last hour.', createdAt: new Date().toISOString() },
-    { id: 'n3', role: 'support', title: '🎧 Priority Ticket Logged', message: 'Customer Priya Sharma requested order status update for #BWL10245.', createdAt: new Date().toISOString() },
-    { id: 'n4', role: 'delivery', title: '🛵 Instant Payout Available', message: 'Your daily earnings of ₹1,450 are ready for instant UPI transfer.', createdAt: new Date().toISOString() },
-    { id: 'n5', role: 'admin', title: '🛵 New Delivery Partner Application', message: 'Suresh Patel applied for EV Scooter delivery onboarding.', createdAt: new Date().toISOString() }
+    { id: 'n2', role: 'admin', title: '📈 High Demand Surge Alert', message: 'Live monitoring active across all branches.', createdAt: new Date().toISOString() },
+    { id: 'n3', role: 'support', title: '🎧 Support Desk Active', message: '24/7 Customer Care and Order Assistance monitoring live orders.', createdAt: new Date().toISOString() },
+    { id: 'n4', role: 'delivery', title: '🛵 Delivery Network Active', message: 'Live delivery partner tracking active.', createdAt: new Date().toISOString() }
   ],
-  issues: [
-    { id: 'TKT-901', orderId: 'BWL10245', customer: 'Priya Sharma', subject: 'Delivery status query during rain surge', priority: 'High', status: 'OPEN' },
-    { id: 'TKT-902', orderId: 'BWL10244', customer: 'Arjun Rao', subject: 'Packaging seal verification request', priority: 'Normal', status: 'IN_PROGRESS' },
-    { id: 'TKT-903', orderId: 'BWL10243', customer: 'Meera Nair', subject: 'Cutlery addition request', priority: 'Low', status: 'RESOLVED' }
-  ],
-  users: [
-    { id: 'u1', name: 'Priya Sharma', mobile: '9876543210', email: 'priya@example.com', provider: 'Mobile OTP', createdAt: '2026-08-20', ordersCount: 12, spent: 3840 },
-    { id: 'u2', name: 'Rahul Verma', mobile: '9812345678', email: 'rahul.v@gmail.com', provider: 'Google', createdAt: '2026-08-19', ordersCount: 8, spent: 2450 },
-    { id: 'u3', name: 'Ananya Roy', mobile: '9765432109', email: 'ananya@outlook.com', provider: 'Mobile OTP', createdAt: '2026-08-18', ordersCount: 5, spent: 1620 },
-    { id: 'u4', name: 'Karan Patel', mobile: '9988776655', email: 'karan.p@yahoo.com', provider: 'Email', createdAt: '2026-08-17', ordersCount: 3, spent: 980 }
-  ],
+  issues: [],
+  users: [],
   deliveryPartners: [],
   deliverySettings: {
     onboardingFee: 499,
@@ -52,9 +50,17 @@ function loadState() {
     if (mergedDeliverySettings.customerDeliveryFee === 40) {
       mergedDeliverySettings.customerDeliveryFee = 0;
     }
+
+    // Clean mock orders and deduplicate by id
+    const cleanOrders = (Array.isArray(parsed?.orders) ? parsed.orders : [])
+      .filter(o => o && !mockOrderIds.has(o.id) && !mockCustomerNames.has(o.customer))
+      .filter((o, idx, arr) => arr.findIndex(t => t.id === o.id) === idx);
+
     return {
       ...clone(defaultState),
       ...parsed,
+      orders: cleanOrders,
+      issues: [],
       deliverySettings: mergedDeliverySettings,
       products: defaultState.products,
       categories: defaultState.categories
@@ -79,7 +85,6 @@ export async function syncWithBackend() {
   try {
     const categoriesRes = await apiClient('/categories', { fallback: null })
     const productsRes = await apiClient('/products', { fallback: null })
-
     let updated = false
 
     if (categoriesRes && Array.isArray(categoriesRes.data) && categoriesRes.data.length > 0) {
@@ -109,7 +114,44 @@ export async function syncWithBackend() {
       updated = true
     }
 
+    // Live Orders Sync from AWS RDS PostgreSQL Database
+    try {
+      const ordersRes = await apiClient('/orders', { fallback: null })
+      if (ordersRes && Array.isArray(ordersRes.data)) {
+        const liveOrders = ordersRes.data
+          .filter(o => o && !mockOrderIds.has(o.id) && !mockCustomerNames.has(o.customerName))
+          .map(o => ({
+            id: o.id,
+            items: o.items || [],
+            total: Number(o.totalAmount || o.total || 0),
+            status: o.status || 'CONFIRMED',
+            type: o.orderType || o.type || 'Delivery',
+            branch: o.branch?.name || o.branch || 'Bowl Central',
+            customer: o.customerName || (o.customerUser ? o.customerUser.name : 'Valued Customer'),
+            customerMobile: o.customerUser?.mobile || o.customerMobile || '',
+            deliveryAddress: o.deliveryAddress || '',
+            driver: o.driver?.name || o.driver || null,
+            driverMobile: o.driver?.mobile || o.driverMobile || null,
+            eta: o.etaMinutes || o.eta || 25,
+            createdAt: o.createdAt || new Date().toISOString()
+          }))
+
+        const orderMap = new Map()
+        liveOrders.forEach(o => orderMap.set(o.id, o))
+        ;(state.orders || []).forEach(o => {
+          if (!orderMap.has(o.id) && !mockOrderIds.has(o.id) && !mockCustomerNames.has(o.customer)) {
+            orderMap.set(o.id, o)
+          }
+        })
+        state = { ...state, orders: Array.from(orderMap.values()) }
+        updated = true
+      }
+    } catch (orderErr) {
+      console.warn('Orders sync error:', orderErr.message)
+    }
+
     if (updated) {
+      persist()
       listeners.forEach((listener) => listener(state))
     }
   } catch (err) {
@@ -117,14 +159,13 @@ export async function syncWithBackend() {
   }
 }
 
-// Automatically sync on load, focus, and every 30 seconds for real-time multi-device sync
-// NOTE: 3s polling was exhausting the backend rate limit (300 req/15min). 30s keeps us well under.
+// Automatically sync on load, focus, and every 10 seconds for real-time multi-device sync
 syncWithBackend()
 if (typeof window !== 'undefined') {
   window.addEventListener('focus', () => syncWithBackend())
   window.addEventListener('online', () => syncWithBackend())
   window.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncWithBackend() })
-  setInterval(() => { syncWithBackend() }, 30000)
+  setInterval(() => { syncWithBackend() }, 10000)
 }
 
 export const orderStatuses = ['CONFIRMED','PREPARING','READY_FOR_PICKUP','ASSIGNED','PICKED_UP','OUT_FOR_DELIVERY','DELIVERED']
@@ -140,14 +181,22 @@ export const deliveryStatusFlow = {
 export function getNextOrderStatus(status) { return deliveryStatusFlow[status] ?? null }
 export function getState() { return state }
 export function subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) }
-export function createOrder(order) { const id = `BWL${Math.floor(10000 + Math.random() * 90000)}`; const newOrder = { id, status: 'CONFIRMED', createdAt: new Date().toISOString(), ...order }; state = { ...state, orders: [newOrder, ...state.orders] }; addNotification('admin','New order received',`${id} has been placed.`); addNotification('support','New order to monitor',`${id} needs monitoring.`); persist(); return newOrder }
-export function updateOrderStatus(orderId, status) {
+export function createOrder(order) { const id = `BWL${Math.floor(10000 + Math.random() * 90000)}`; const newOrder = { id, status: 'CONFIRMED', createdAt: new Date().toISOString(), ...order }; state = { ...state, orders: [newOrder, ...state.orders.filter(o => o.id !== id)] }; addNotification('admin','New order received',`${id} has been placed.`); addNotification('support','New order to monitor',`${id} needs monitoring.`); persist(); return newOrder }
+export async function updateOrderStatus(orderId, status) {
   if (!orderId || !orderStatuses.includes(status)) return false
   const order = state.orders.find((item) => item.id === orderId)
   if (!order || order.status === status) return false
   state = { ...state, orders: state.orders.map((item) => item.id === orderId ? { ...item, status } : item) }
   addNotification('customer','Order updated',`${orderId} is now ${status.replaceAll('_',' ').toLowerCase()}.`)
   persist()
+  try {
+    await apiClient(`/orders/${orderId}/status`, {
+      method: 'PATCH',
+      body: { status }
+    })
+  } catch (err) {
+    console.warn('Backend order status update:', err.message)
+  }
   return true
 }
 export function advanceOrderStatus(orderId) {

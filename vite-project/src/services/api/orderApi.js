@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
-import { getState, createOrder as storeCreateOrder, updateOrderStatus as storeUpdateStatus, assignDelivery as storeAssignDelivery } from '../prototypeStore';
+import { getState, syncWithBackend } from '../prototypeStore';
 
 export const orderApi = {
   async getOrders(params = {}) {
@@ -7,7 +7,7 @@ export const orderApi = {
     const endpoint = queryParams ? `/orders?${queryParams}` : '/orders';
     return apiClient(endpoint, {
       method: 'GET',
-      fallback: () => ({ data: getState().orders || [] })
+      fallback: () => ({ data: (getState().orders || []).filter(o => o && !o.id?.startsWith('BWL1024')) })
     });
   },
 
@@ -18,10 +18,14 @@ export const orderApi = {
   },
 
   async createOrder(orderPayload) {
-    return apiClient('/orders', {
+    const res = await apiClient('/orders', {
       method: 'POST',
       body: orderPayload,
     });
+    try {
+      syncWithBackend();
+    } catch {}
+    return res;
   },
 
   async updateOrder(id, orderData) {

@@ -8,6 +8,14 @@ async function main() {
   
   const addrs = await prisma.savedAddress.findMany();
   console.log("Saved Addresses in DB:", addrs);
+
+  const orders = await prisma.order.findMany({
+    include: { items: true, branch: true }
+  });
+  console.log("Orders in DB:", orders);
+
+  const issues = await prisma.supportIssue.findMany();
+  console.log("Issues in DB:", issues);
 }
 
 main()

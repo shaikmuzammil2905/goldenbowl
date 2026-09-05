@@ -35,16 +35,6 @@ export const products = [
   { id: 15, name: 'Peach Iced Tea', category: 'drinks', price: 99, calories: 130, portion: '350ml', rating: 4.7, image: foodImages.icedTea, description: 'Fresh brewed black tea infused with natural peach flavor.', ingredients: ['Brewed tea', 'Peach extract', 'Lemon', 'Ice'], available: true, veg: true, vegan: true, sugarFree: true },
 ]
 
-export const initialOrders = [
-  { id: 'BWL10245', items: [{ productId: 1, quantity: 2 }], total: 538, status: 'OUT_FOR_DELIVERY', type: 'Delivery', branch: 'Bowl Koramangala', customer: 'Priya Sharma', driver: 'Rahul Kumar', eta: 18, createdAt: '2026-08-30T18:45:00.000Z' },
-  { id: 'BWL10244', items: [{ productId: 3, quantity: 1 }, { productId: 6, quantity: 1 }], total: 398, status: 'PREPARING', type: 'Pickup', branch: 'Bowl BTM', customer: 'Arjun Rao', driver: null, eta: 22, createdAt: '2026-08-30T18:15:00.000Z' },
-  { id: 'BWL10243', items: [{ productId: 2, quantity: 1 }], total: 229, status: 'CONFIRMED', type: 'Delivery', branch: 'Bowl HSR', customer: 'Meera Nair', driver: 'Vikram Singh', eta: 35, createdAt: '2026-08-30T17:50:00.000Z' },
-  { id: 'BWL96462', items: [{ productId: 8, quantity: 1 }, { productId: 11, quantity: 1 }], total: 565, status: 'PICKED_UP', type: 'Delivery', branch: 'Bowl Koramangala', customer: 'Priya Sharma', driver: 'Rahul Kumar', eta: 10, createdAt: '2026-08-30T16:20:00.000Z' },
-  { id: 'BWL96461', items: [{ productId: 4, quantity: 2 }], total: 358, status: 'CANCELLED', type: 'Delivery', branch: 'Bowl BTM', customer: 'Rohan Gupta', driver: null, eta: 0, createdAt: '2026-08-30T14:10:00.000Z', cancelReason: 'Customer requested cancellation' },
-  { id: 'BWL96460', items: [{ productId: 1, quantity: 1 }, { productId: 13, quantity: 2 }], total: 427, status: 'DELIVERED', type: 'Delivery', branch: 'Bowl HSR', customer: 'Siddharth Rao', driver: 'Vikram Singh', eta: 0, createdAt: '2026-08-30T12:05:00.000Z' },
-  { id: 'BWL96450', items: [{ productId: 3, quantity: 2 }], total: 558, status: 'DELIVERED', type: 'Delivery', branch: 'Bowl Koramangala', customer: 'Ananya Roy', driver: 'Rahul Kumar', eta: 0, createdAt: '2026-08-29T19:30:00.000Z' },
-  { id: 'BWL96449', items: [{ productId: 5, quantity: 1 }], total: 199, status: 'CANCELLED', type: 'Pickup', branch: 'Bowl BTM', customer: 'Karan Patel', driver: null, eta: 0, createdAt: '2026-08-29T15:40:00.000Z', cancelReason: 'Out of stock item' },
-  { id: 'BWL96448', items: [{ productId: 2, quantity: 2 }], total: 458, status: 'DELIVERED', type: 'Delivery', branch: 'Bowl HSR', customer: 'Rahul Verma', driver: 'Suresh Patel', eta: 0, createdAt: '2026-08-28T20:10:00.000Z' }
-]
+export const initialOrders = []
 
 export const dashboardStats = { sales: 84250, orders: 126, delivering: 18, branches: 12, customers: 3840, deliveryStaff: 34 }
