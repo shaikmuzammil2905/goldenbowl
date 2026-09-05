@@ -26,7 +26,7 @@ export const env = {
   SMTP_FROM: process.env.SMTP_FROM || 'Golden Food Bowl <noreply@goldenbowl.com>',
 
   // Application Authentication Secret
-  JWT_SECRET: process.env.JWT_SECRET || 'goldenbowl-fallback-jwt-secret-do-not-use-in-prod',
+  JWT_SECRET: process.env.JWT_SECRET || 'goldenbowl_prod_secure_jwt_secret_key_2026_rds_auth',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
 
   FRONTEND_URL: process.env.FRONTEND_URL || '*',

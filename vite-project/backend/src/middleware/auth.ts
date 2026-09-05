@@ -8,7 +8,13 @@ import { logger } from '../utils/logger.js';
 
 let verifier: any = null;
 
-if (env.COGNITO_USER_POOL_ID && env.COGNITO_CLIENT_ID) {
+// Only initialize Cognito verifier if valid production pool ID is supplied (not placeholder)
+if (
+  env.COGNITO_USER_POOL_ID &&
+  env.COGNITO_CLIENT_ID &&
+  !env.COGNITO_USER_POOL_ID.includes('xxxx') &&
+  !env.COGNITO_USER_POOL_ID.endsWith('_goldenbowl')
+) {
   try {
     verifier = CognitoJwtVerifier.create({
       userPoolId: env.COGNITO_USER_POOL_ID,
@@ -16,52 +22,45 @@ if (env.COGNITO_USER_POOL_ID && env.COGNITO_CLIENT_ID) {
       clientId: env.COGNITO_CLIENT_ID,
     });
   } catch (err) {
-    logger.warn('Cognito JWT verifier initialization skipped (missing or invalid credentials)');
+    logger.warn('Cognito JWT verifier initialization skipped');
   }
 }
+
+import jwt from 'jsonwebtoken';
 
 export async function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   let authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    authHeader = 'Bearer token-admin-goldenbowl';
+    return res.status(401).json({ success: false, message: 'Authorization required', code: 'AUTH_REQUIRED' });
   }
 
   const token = authHeader.split(' ')[1];
+  let isExpired = false;
+  let failureReason = 'unknown';
 
-  // 1. Prototype / Development Token Check
-  if (env.NODE_ENV === 'development') {
-    if (token.startsWith('token-') || token === 'token-admin-goldenbowl') {
-      const roleHeader = ((req.headers['x-user-role'] as string)?.toUpperCase() as UserRole) || 'ADMIN';
-      const emailHeader = (req.headers['x-user-email'] as string) || 'admin@goldenbowl.com';
-
-      try {
-        let user = await prisma.user.findFirst({ where: { email: emailHeader } });
-        if (!user) {
-          user = await prisma.user.create({
-            data: {
-              email: emailHeader,
-              name: 'Golden Admin',
-              role: roleHeader,
-            },
-          });
-        }
-
-        req.user = {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role as UserRole,
-        };
-        return next();
-      } catch (err: any) {
-        req.user = {
-          id: 'admin-fallback',
-          email: emailHeader,
-          name: 'Admin User',
-          role: roleHeader,
-        };
-        return next();
-      }
+  // 1. Application Native JWT Check
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET) as any;
+    const user = await prisma.user.findUnique({ where: { id: payload.id } });
+    
+    if (user) {
+      req.user = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role as UserRole,
+      };
+      logger.info(`[Auth] User authenticated: ${user.id} (${user.role}) for ${req.method} ${req.originalUrl}`);
+      return next();
+    } else {
+      failureReason = 'user_not_found_in_db';
+    }
+  } catch (err: any) {
+    if (err.name === 'TokenExpiredError') {
+      isExpired = true;
+      failureReason = 'token_expired';
+    } else {
+      failureReason = err.message || 'invalid_jwt';
     }
   }
 
@@ -94,13 +93,17 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
         role: user.role as UserRole,
         cognitoSub: user.cognitoSub || undefined,
       };
+      logger.info(`[Auth] Cognito user authenticated: ${user.id} (${user.role}) for ${req.method} ${req.originalUrl}`);
       return next();
     } catch (error: any) {
-      logger.warn('Cognito JWT verification error:', error.message);
-      return next(new UnauthorizedError('Invalid or expired token'));
+      failureReason = `cognito_${error.message}`;
     }
   }
 
-  // If no verifier is configured but we are in production, block access
-  return next(new UnauthorizedError('Authentication service is unavailable or not configured.'));
+  logger.warn(`[Auth] Unauthorized request: ${req.method} ${req.originalUrl} - reason: ${failureReason}`);
+  return res.status(401).json({
+    success: false,
+    message: 'Invalid or expired token',
+    code: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID'
+  });
 }

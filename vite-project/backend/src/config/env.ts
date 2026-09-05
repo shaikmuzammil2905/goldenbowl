@@ -17,6 +17,18 @@ export const env = {
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || 'rzp_test_TWMl8a3GZGEgds',
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || 'y5NHIs1oZ6w0jvG37FKiSTSc',
 
+  // Nodemailer SMTP (Email OTP)
+  SMTP_HOST: process.env.SMTP_HOST || 'smtp.gmail.com',
+  SMTP_PORT: parseInt(process.env.SMTP_PORT || '587', 10),
+  SMTP_SECURE: process.env.SMTP_SECURE === 'true',
+  SMTP_USER: process.env.SMTP_USER || '',
+  SMTP_PASS: process.env.SMTP_PASS || '',
+  SMTP_FROM: process.env.SMTP_FROM || 'Golden Food Bowl <noreply@goldenbowl.com>',
+
+  // Application Authentication Secret
+  JWT_SECRET: process.env.JWT_SECRET || 'goldenbowl_prod_secure_jwt_secret_key_2026_rds_auth',
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+
   FRONTEND_URL: process.env.FRONTEND_URL || '*',
 };
 

@@ -7,6 +7,7 @@ const router = Router();
 // ── Registration & Password Login ───────────────────────────────────────────
 router.post('/register', AuthController.register);
 router.post('/login', AuthController.login);
+router.post('/refresh', AuthController.refresh);
 
 // ── Email OTP Endpoints ──────────────────────────────────────────────────────
 router.post('/send-otp', AuthController.sendOtp);

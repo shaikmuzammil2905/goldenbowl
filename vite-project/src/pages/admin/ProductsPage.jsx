@@ -140,7 +140,14 @@ export function ProductsPage() {
       else await addProduct(changes)
       setShowForm(false)
     } catch (err) {
-      alert(`Database Error: ${err.message}`)
+      const msg = err.message || String(err);
+      if (err.status === 401 || msg.includes('token') || msg.includes('session') || msg.includes('sign in')) {
+        alert(`Authentication Error: ${msg}`);
+      } else if (err.status === 403 || msg.includes('authorized') || msg.includes('permission')) {
+        alert(`Permission Error: ${msg}`);
+      } else {
+        alert(`Error Saving Product: ${msg}`);
+      }
     }
   }
 

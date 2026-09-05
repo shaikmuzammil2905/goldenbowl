@@ -468,7 +468,14 @@ function Products() {
       }
       setShowForm(false)
     } catch (err) {
-      alert(`Database Error: ${err.message}`)
+      const msg = err.message || String(err);
+      if (err.status === 401 || msg.includes('token') || msg.includes('session') || msg.includes('sign in')) {
+        alert(`Authentication Error: ${msg}`);
+      } else if (err.status === 403 || msg.includes('authorized') || msg.includes('permission')) {
+        alert(`Permission Error: ${msg}`);
+      } else {
+        alert(`Product Save Error: ${msg}`);
+      }
     } finally {
       setTimeout(() => setToast(''), 3000)
     }
@@ -480,7 +487,14 @@ function Products() {
         await deleteProduct(id)
         setToast(`Product deleted successfully from database!`)
       } catch (err) {
-        alert(`Database Error: ${err.message}`)
+        const msg = err.message || String(err);
+        if (err.status === 401 || msg.includes('token') || msg.includes('session') || msg.includes('sign in')) {
+          alert(`Authentication Error: ${msg}`);
+        } else if (err.status === 403 || msg.includes('authorized') || msg.includes('permission')) {
+          alert(`Permission Error: ${msg}`);
+        } else {
+          alert(`Product Delete Error: ${msg}`);
+        }
       } finally {
         setTimeout(() => setToast(''), 3000)
       }
@@ -735,7 +749,14 @@ function Categories() {
       }
       setName('')
     } catch (err) {
-      alert(`Database Error: ${err.message}`)
+      const msg = err.message || String(err);
+      if (err.status === 401 || msg.includes('token') || msg.includes('session') || msg.includes('sign in')) {
+        alert(`Authentication Error: ${msg}`);
+      } else if (err.status === 403 || msg.includes('authorized') || msg.includes('permission')) {
+        alert(`Permission Error: ${msg}`);
+      } else {
+        alert(`Category Save Error: ${msg}`);
+      }
     } finally {
       setTimeout(() => setToast(''), 3000)
     }
@@ -753,7 +774,14 @@ function Categories() {
         await deleteCategory(id)
         setToast(`Category deleted from database!`)
       } catch (err) {
-        alert(`Database Error: ${err.message}`)
+        const msg = err.message || String(err);
+        if (err.status === 401 || msg.includes('token') || msg.includes('session') || msg.includes('sign in')) {
+          alert(`Authentication Error: ${msg}`);
+        } else if (err.status === 403 || msg.includes('authorized') || msg.includes('permission')) {
+          alert(`Permission Error: ${msg}`);
+        } else {
+          alert(`Category Delete Error: ${msg}`);
+        }
       } finally {
         setTimeout(() => setToast(''), 3000)
       }

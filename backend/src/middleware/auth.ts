@@ -8,7 +8,13 @@ import { logger } from '../utils/logger.js';
 
 let verifier: any = null;
 
-if (env.COGNITO_USER_POOL_ID && env.COGNITO_CLIENT_ID) {
+// Only initialize Cognito verifier if valid production pool ID is supplied (not placeholder)
+if (
+  env.COGNITO_USER_POOL_ID &&
+  env.COGNITO_CLIENT_ID &&
+  !env.COGNITO_USER_POOL_ID.includes('xxxx') &&
+  !env.COGNITO_USER_POOL_ID.endsWith('_goldenbowl')
+) {
   try {
     verifier = CognitoJwtVerifier.create({
       userPoolId: env.COGNITO_USER_POOL_ID,
@@ -16,7 +22,7 @@ if (env.COGNITO_USER_POOL_ID && env.COGNITO_CLIENT_ID) {
       clientId: env.COGNITO_CLIENT_ID,
     });
   } catch (err) {
-    logger.warn('Cognito JWT verifier initialization skipped (missing or invalid credentials)');
+    logger.warn('Cognito JWT verifier initialization skipped');
   }
 }
 
@@ -25,10 +31,12 @@ import jwt from 'jsonwebtoken';
 export async function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   let authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: 'Authorization required' });
+    return res.status(401).json({ success: false, message: 'Authorization required', code: 'AUTH_REQUIRED' });
   }
 
   const token = authHeader.split(' ')[1];
+  let isExpired = false;
+  let failureReason = 'unknown';
 
   // 1. Application Native JWT Check
   try {
@@ -42,10 +50,18 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
         name: user.name,
         role: user.role as UserRole,
       };
+      logger.info(`[Auth] User authenticated: ${user.id} (${user.role}) for ${req.method} ${req.originalUrl}`);
       return next();
+    } else {
+      failureReason = 'user_not_found_in_db';
     }
-  } catch (err) {
-    // If it's not a valid native JWT, we'll let it fall through to Cognito (if configured).
+  } catch (err: any) {
+    if (err.name === 'TokenExpiredError') {
+      isExpired = true;
+      failureReason = 'token_expired';
+    } else {
+      failureReason = err.message || 'invalid_jwt';
+    }
   }
 
   // 2. Production Cognito Token Verification
@@ -77,11 +93,17 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
         role: user.role as UserRole,
         cognitoSub: user.cognitoSub || undefined,
       };
+      logger.info(`[Auth] Cognito user authenticated: ${user.id} (${user.role}) for ${req.method} ${req.originalUrl}`);
       return next();
     } catch (error: any) {
-      logger.warn('Cognito JWT verification error:', error.message);
+      failureReason = `cognito_${error.message}`;
     }
   }
 
-  return res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  logger.warn(`[Auth] Unauthorized request: ${req.method} ${req.originalUrl} - reason: ${failureReason}`);
+  return res.status(401).json({
+    success: false,
+    message: 'Invalid or expired token',
+    code: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID'
+  });
 }

@@ -21,14 +21,14 @@ export const loginSchema = z.object({
 });
 
 export const productSchema = z.object({
-  categoryId: z.string().optional(),
-  category: z.string().optional(),
+  categoryId: z.union([z.string(), z.number()]).transform((val) => String(val)).optional(),
+  category: z.union([z.string(), z.number()]).transform((val) => String(val)).optional(),
   name: z.string().optional(),
   price: z.union([z.number(), z.string()]).transform((val) => Number(val)).optional(),
   originalPrice: z.union([z.number(), z.string()]).transform((val) => Number(val)).optional(),
   calories: z.union([z.number(), z.string()]).transform((val) => Number(val)).optional(),
   portion: z.string().optional(),
-  rating: z.number().optional(),
+  rating: z.union([z.number(), z.string()]).transform((val) => Number(val)).optional(),
   imageUrl: z.string().optional(),
   image: z.string().optional(),
   adminImage: z.string().optional(),

@@ -6,6 +6,7 @@ import { validateSchema, loginSchema } from '../validators/index.js';
 const router = Router();
 
 router.post('/login', validateSchema(loginSchema), AuthController.login);
+router.post('/refresh', AuthController.refresh);
 router.post('/logout', authenticateToken, AuthController.logout);
 router.get('/me', authenticateToken, AuthController.me);
 router.post('/request-reset', AuthController.requestReset);

@@ -16,7 +16,20 @@ export function AdminSignInPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (authStorage.getAdminAuth()) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('session') === 'expired') {
+      authStorage.clearAdminAuth();
+      setError('Your administrator session has expired. Please sign in again.');
+      return;
+    }
+    const adminToken = authStorage.getAdminToken();
+    const adminRefreshToken = authStorage.getAdminRefreshToken();
+    if (authStorage.getAdminAuth() && (adminToken || adminRefreshToken)) {
+      if (authStorage.isTokenExpired(adminToken) && !adminRefreshToken) {
+        authStorage.clearAdminAuth();
+        setError('Your administrator session has expired. Please sign in again.');
+        return;
+      }
       navigate('/admin/dashboard', { replace: true });
     }
   }, [navigate]);
@@ -31,32 +44,37 @@ export function AdminSignInPage() {
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
-    const MASTER_EMAILS = ['admin@goldenbowl.com', 'muzammilshaik826@gmail.com'];
-    const MASTER_PASSWORDS = ['GoldenBowl2026!', 'admin123', 'Admin@123'];
 
     try {
       const response = await apiClient('/auth/login', {
         method: 'POST',
         body: { identifier: cleanEmail, password: cleanPassword, role: 'ADMIN' },
+        role: 'admin',
       });
 
+      if (!response || !response.success) {
+        throw new Error(response?.message || 'Login failed. Please check your credentials.');
+      }
+
+      const accessToken = response.accessToken || response.token;
+      const refreshToken = response.refreshToken || '';
+
+      if (!accessToken) {
+        throw new Error('Authentication failed: No access token received from server.');
+      }
+
       authStorage.setAdminAuth({ 
+        id: response.user?.id,
+        name: response.user?.name || 'Golden Admin',
         email: response.user?.email || cleanEmail, 
-        role: response.user?.role || 'admin',
-        token: response.token || response.accessToken || 'admin-session-active'
+        role: response.user?.role ? response.user.role.toLowerCase() : 'admin',
+        token: accessToken,
+        accessToken,
+        refreshToken,
       });
+
       navigate('/admin/dashboard', { replace: true });
     } catch (err) {
-      // If server returned error but credentials match configured Master Admin, allow offline entry
-      if (MASTER_EMAILS.includes(cleanEmail) && MASTER_PASSWORDS.includes(cleanPassword)) {
-        authStorage.setAdminAuth({
-          email: cleanEmail,
-          role: 'admin',
-          token: 'master-offline-token'
-        });
-        navigate('/admin/dashboard', { replace: true });
-        return;
-      }
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
