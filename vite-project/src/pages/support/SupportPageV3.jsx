@@ -131,8 +131,8 @@ function Dashboard({ state }) {
               <Users size={15} />
             </div>
           </div>
-          <strong style={{ fontSize: 20, color: '#0f172a', fontWeight: 900 }}>6 / 8</strong>
-          <small style={{ color: '#16a34a', fontSize: 9.5, fontWeight: 700 }}>Avg response 38s</small>
+          <strong style={{ fontSize: 20, color: '#0f172a', fontWeight: 900 }}>0</strong>
+          <small style={{ color: '#16a34a', fontSize: 9.5, fontWeight: 700 }}>No agents online</small>
         </div>
 
         <div
@@ -768,12 +768,7 @@ function Issues({ issues }) {
 }
 
 function Agents() {
-  const [agents, setAgents] = useState([
-    { name: 'Ananya Rao', role: 'Senior Support Agent', status: 'Online', cases: 3, resolved: 24, shift: '09:00 AM - 05:00 PM' },
-    { name: 'Vikram Shah', role: 'Live Chat Specialist', status: 'Online', cases: 2, resolved: 19, shift: '10:00 AM - 06:00 PM' },
-    { name: 'Meera Das', role: 'Order Refund Desk', status: 'Busy', cases: 5, resolved: 31, shift: '01:00 PM - 09:00 PM' },
-    { name: 'Rohan Gupta', role: 'Delivery Escalations', status: 'Offline', cases: 0, resolved: 14, shift: 'Night Shift' },
-  ])
+  const [agents, setAgents] = useState([])
 
   const toggleStatus = (index) => {
     setAgents(prev => prev.map((a, i) => {
@@ -809,7 +804,17 @@ function Agents() {
             </tr>
           </thead>
           <tbody>
-            {agents.map((a, idx) => (
+            {agents.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <Users size={32} style={{ opacity: 0.3 }} />
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>No support agents</span>
+                    <span style={{ fontSize: 11 }}>Agent roster will appear here when agents are added.</span>
+                  </div>
+                </td>
+              </tr>
+            ) : agents.map((a, idx) => (
               <tr key={a.name}>
                 <td>
                   <strong>{a.name}</strong>
