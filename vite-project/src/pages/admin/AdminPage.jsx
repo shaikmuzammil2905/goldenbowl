@@ -113,7 +113,7 @@ export function AdminPage() {
       {path === 'delivery' && <Delivery />}
       {path === 'support' && <Support liveOrders={liveOrders} />}
       {path === 'reports' && <AdminReports />}
-      {path === 'notifications' && <AdminNotifications />}
+      {path === 'notifications' && <AdminNotifications liveOrders={liveOrders} />}
     </section>
   )
 }
@@ -2784,6 +2784,12 @@ function Support({ liveOrders = [] }) {
     </div>
   )
 }
-function AdminNotifications() { return <section className="admin-table-card"><div className="table-heading"><h2><FileText size={18} style={{ color: '#b4811d' }} /> Notifications</h2></div><NotificationPanel role="admin" /></section> }
+function AdminNotifications({ liveOrders = [] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <NotificationPanel role="admin" liveOrders={liveOrders} />
+    </div>
+  )
+}
 
 export default AdminPage
