@@ -56,7 +56,10 @@ import {
   toggleSupportAgentStatus,
   deleteSupportAgent,
   addIssue,
-  updateIssue
+  updateIssue,
+  mockCustomerNames,
+  mockCustomerMobiles,
+  mockCustomerEmails
 } from '../../services/prototypeStore'
 import { NotificationPanel } from '../../components/notifications/NotificationPanel'
 import { AdminReports } from './AdminReports'
@@ -873,33 +876,55 @@ function Customers({ liveOrders = [] }) {
   ;(Array.isArray(orders) ? orders : []).forEach(o => { if (o?.id && !allOrdersMap.has(o.id)) allOrdersMap.set(o.id, o) })
   const combinedOrders = Array.from(allOrdersMap.values())
 
-  // Aggregate live customer profiles
+  const isMock = (name = '', mobile = '', email = '') => {
+    const cleanName = (name || '').trim().toLowerCase()
+    const cleanMobile = (mobile || '').trim()
+    const cleanEmail = (email || '').trim().toLowerCase()
+
+    if (mockCustomerNames.has(name) || mockCustomerMobiles.has(cleanMobile) || mockCustomerEmails.has(cleanEmail)) {
+      return true
+    }
+    if (
+      cleanName.includes('priya sharma') ||
+      cleanName.includes('rahul verma') ||
+      cleanName.includes('ananya roy') ||
+      cleanName.includes('karan patel') ||
+      cleanName.includes('meera nair') ||
+      cleanName.includes('rohan gupta') ||
+      cleanName.includes('siddharth rao')
+    ) {
+      return true
+    }
+    if (
+      cleanEmail.includes('priya@') ||
+      cleanEmail.includes('rahul.v@') ||
+      cleanEmail.includes('ananya@') ||
+      cleanEmail.includes('karan.p@')
+    ) {
+      return true
+    }
+    if (
+      cleanMobile === '9876543210' ||
+      cleanMobile === '9812345678' ||
+      cleanMobile === '9765432109' ||
+      cleanMobile === '9988776655'
+    ) {
+      return true
+    }
+    return false
+  }
+
+  // Aggregate live customer profiles strictly from real orders placed (live running data)
   const customerMap = new Map()
 
-  // 1. Registered users
-  users.forEach(u => {
-    if (u.role === 'customer' || !u.role) {
-      const key = (u.mobile || u.email || u.name || '').toLowerCase().trim()
-      if (key) {
-        customerMap.set(key, {
-          id: u.id,
-          name: u.name || 'Valued Customer',
-          mobile: u.mobile || '-',
-          email: u.email || '-',
-          ordersCount: 0,
-          totalSpent: 0,
-          orders: [],
-          lastOrderDate: u.createdAt || new Date().toISOString(),
-          preferredBranch: 'Bowl Central'
-        })
-      }
-    }
-  })
-
-  // 2. Orders customers
   combinedOrders.forEach(o => {
     const custName = o.customer || 'Valued Guest'
     const mobile = o.customerMobile || '-'
+    const email = o.customerEmail || '-'
+
+    // Strictly skip mock customer entities
+    if (isMock(custName, mobile, email)) return
+
     const key = (mobile !== '-' ? mobile : custName).toLowerCase().trim()
 
     if (!customerMap.has(key)) {
@@ -907,7 +932,7 @@ function Customers({ liveOrders = [] }) {
         id: `cust-${customerMap.size + 1}`,
         name: custName,
         mobile: mobile,
-        email: '-',
+        email: email,
         ordersCount: 0,
         totalSpent: 0,
         orders: [],
@@ -926,15 +951,30 @@ function Customers({ liveOrders = [] }) {
     }
   })
 
-  const customerList = Array.from(customerMap.values()).map(c => {
-    let customerTier = 'Active Diner'
-    if (c.totalSpent >= 1500 || c.ordersCount >= 4) {
-      customerTier = 'VIP Member'
-    } else if (c.ordersCount >= 2) {
-      customerTier = 'Repeat Customer'
+  // Enrich customer profiles with verified email/mobile if registered
+  users.forEach(u => {
+    if ((u.role === 'customer' || !u.role) && !isMock(u.name, u.mobile, u.email)) {
+      const key = (u.mobile || u.name || '').toLowerCase().trim()
+      if (key && customerMap.has(key)) {
+        const existing = customerMap.get(key)
+        if (u.mobile && existing.mobile === '-') existing.mobile = u.mobile
+        if (u.email && existing.email === '-') existing.email = u.email
+      }
     }
-    return { ...c, tier: customerTier }
   })
+
+  // Only include live running customers with orders (no empty mock duplicates)
+  const customerList = Array.from(customerMap.values())
+    .filter(c => !isMock(c.name, c.mobile, c.email) && c.ordersCount > 0)
+    .map(c => {
+      let customerTier = 'Active Diner'
+      if (c.totalSpent >= 1500 || c.ordersCount >= 4) {
+        customerTier = 'VIP Member'
+      } else if (c.ordersCount >= 2) {
+        customerTier = 'Repeat Customer'
+      }
+      return { ...c, tier: customerTier }
+    })
 
   const filtered = customerList.filter(c => {
     const matchesQuery =

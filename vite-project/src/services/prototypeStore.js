@@ -8,8 +8,15 @@ const mockOrderIds = new Set([
   'BWL10245', 'BWL10244', 'BWL10243', 'BWL96462', 'BWL96461',
   'BWL96460', 'BWL96450', 'BWL96449', 'BWL96448'
 ]);
-const mockCustomerNames = new Set([
-  'Priya Sharma', 'Arjun Rao', 'Meera Nair', 'Rohan Gupta', 'Siddharth Rao'
+export const mockCustomerNames = new Set([
+  'Priya Sharma', 'Arjun Rao', 'Meera Nair', 'Rohan Gupta', 'Siddharth Rao',
+  'Rahul Verma', 'Ananya Roy', 'Karan Patel'
+]);
+export const mockCustomerMobiles = new Set([
+  '9876543210', '9812345678', '9765432109', '9988776655'
+]);
+export const mockCustomerEmails = new Set([
+  'priya@example.com', 'rahul.v@gmail.com', 'ananya@outlook.com', 'karan.p@yahoo.com'
 ]);
 
 const defaultState = {
@@ -82,14 +89,31 @@ function loadState() {
       .filter(o => o && !mockOrderIds.has(o.id) && !mockCustomerNames.has(o.customer))
       .filter((o, idx, arr) => arr.findIndex(t => t.id === o.id) === idx);
 
+    // Clean out mock users
+    const cleanUsers = (Array.isArray(parsed?.users) ? parsed.users : [])
+      .filter(u => u && !mockCustomerNames.has(u.name) && !mockCustomerMobiles.has(u.mobile) && !mockCustomerEmails.has(u.email));
+
     const cleanAgents = Array.isArray(parsed?.supportAgents) && parsed.supportAgents.length > 0
       ? parsed.supportAgents
       : defaultState.supportAgents;
+
+    // Resave cleaned state to localStorage to purge old mock entries immediately
+    if (saved) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          ...parsed,
+          orders: cleanOrders,
+          users: cleanUsers,
+          supportAgents: cleanAgents
+        }));
+      } catch {}
+    }
 
     return {
       ...clone(defaultState),
       ...parsed,
       orders: cleanOrders,
+      users: cleanUsers,
       issues: [],
       supportAgents: cleanAgents,
       deliverySettings: mergedDeliverySettings,
