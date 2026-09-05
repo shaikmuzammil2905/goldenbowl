@@ -45,7 +45,14 @@ export const authStorage = {
 
   // Admin Auth
   getAdminAuth() {
-    return sessionStorage.getItem(KEYS.ADMIN_AUTH) === '1' || localStorage.getItem(KEYS.ADMIN_AUTH) === '1';
+    const isAuth = sessionStorage.getItem(KEYS.ADMIN_AUTH) === '1' || localStorage.getItem(KEYS.ADMIN_AUTH) === '1';
+    if (!isAuth) return false;
+    const user = this.getAdminUser();
+    if (user && user.role && user.role.toUpperCase() !== 'ADMIN') {
+      this.clearAdminAuth();
+      return false;
+    }
+    return true;
   },
   setAdminAuth(user = null) {
     sessionStorage.setItem(KEYS.ADMIN_AUTH, '1');

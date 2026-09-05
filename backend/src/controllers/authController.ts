@@ -241,13 +241,31 @@ export class AuthController {
           });
         }
 
-        // Ensure user account has DELIVERY role
+        // Ensure user account has DELIVERY role (never downgrade ADMIN)
         if (user.role !== 'DELIVERY' && user.role !== 'ADMIN') {
           await prisma.user.update({
             where: { id: user.id },
             data: { role: 'DELIVERY' },
           });
           user.role = 'DELIVERY' as any;
+        }
+      }
+
+      // If user is signing in via the Admin portal, ensure they have ADMIN role
+      const ADMIN_MASTER_EMAILS = ['admin@goldenbowl.com', 'muzammilshaik826@gmail.com'];
+      if (role === 'ADMIN') {
+        if (ADMIN_MASTER_EMAILS.includes(user.email.toLowerCase()) && user.role !== 'ADMIN') {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { role: 'ADMIN' },
+          });
+          user.role = 'ADMIN' as any;
+        }
+        if (user.role !== 'ADMIN') {
+          return res.status(403).json({
+            success: false,
+            message: `Access denied. Role '${user.role}' is not authorized for the Administrator portal.`,
+          });
         }
       }
 
