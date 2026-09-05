@@ -771,10 +771,15 @@ function Profile() {
   }, [user.id])
 
   const [editingAddress, setEditingAddress] = React.useState(null)
+  const [addressError, setAddressError] = React.useState(null)
 
   const handleSaveAddress = async (e) => {
     e.preventDefault()
-    if (!user.id) return;
+    setAddressError(null)
+    if (!user.id) {
+      setAddressError("Authentication error: User ID missing.")
+      return;
+    }
     
     const formData = new FormData(e.target)
     const addrData = {
@@ -793,7 +798,7 @@ function Profile() {
         const res = await addressApi.updateAddress(user.id, editingAddress.id, {
           type,
           address: JSON.stringify(addrData),
-          isDefault: editingAddress.isDefault
+          isDefault: editingAddress.isDefault || false
         })
         if (res?.data) {
           setAddresses(prev => prev.map(a => a.id === res.data.id ? res.data : a))
@@ -810,7 +815,7 @@ function Profile() {
       }
       setEditingAddress(null)
     } catch (err) {
-      alert("Failed to save address");
+      setAddressError(err.message || "Unable to save address. Please check your details and try again.");
     }
   }
 
@@ -820,7 +825,7 @@ function Profile() {
       await addressApi.deleteAddress(user.id, id);
       setAddresses(prev => prev.filter(a => a.id !== id));
     } catch (err) {
-      alert("Failed to delete address");
+      setAddressError(err.message || "Failed to delete address");
     }
   }
   const [paymentMethods] = React.useState([
@@ -995,6 +1000,7 @@ function Profile() {
                 }
                 return (
                   <>
+                    {addressError && <div style={{padding:12,background:'#fee2e2',color:'#b91c1c',borderRadius:8,fontSize:12,marginBottom:10}}>{addressError}</div>}
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                       <label><span>Label</span>
                         <select name="type" defaultValue={editingAddress.type || 'Home'} style={{width:'100%',padding:10,borderRadius:10,border:'1px solid #ddd',background:'#f9f9f9'}}>
