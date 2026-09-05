@@ -26,6 +26,32 @@ const defaultState = {
   issues: [],
   users: [],
   deliveryPartners: [],
+  supportAgents: [
+    {
+      id: 'ag-1',
+      name: 'Ananya Sharma',
+      email: 'ananya.s@goldenbowl.com',
+      mobile: '+91 98451 23456',
+      role: 'Senior Care Specialist',
+      shift: 'Morning (8 AM - 4 PM)',
+      status: 'Online',
+      cases: 2,
+      resolved: 14,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'ag-2',
+      name: 'Vikram Patel',
+      email: 'vikram.p@goldenbowl.com',
+      mobile: '+91 97312 34567',
+      role: 'Support Executive',
+      shift: 'Evening (4 PM - 12 AM)',
+      status: 'Online',
+      cases: 1,
+      resolved: 9,
+      createdAt: new Date().toISOString()
+    }
+  ],
   deliverySettings: {
     onboardingFee: 499,
     kitFee: 350,
@@ -56,11 +82,16 @@ function loadState() {
       .filter(o => o && !mockOrderIds.has(o.id) && !mockCustomerNames.has(o.customer))
       .filter((o, idx, arr) => arr.findIndex(t => t.id === o.id) === idx);
 
+    const cleanAgents = Array.isArray(parsed?.supportAgents) && parsed.supportAgents.length > 0
+      ? parsed.supportAgents
+      : defaultState.supportAgents;
+
     return {
       ...clone(defaultState),
       ...parsed,
       orders: cleanOrders,
       issues: [],
+      supportAgents: cleanAgents,
       deliverySettings: mergedDeliverySettings,
       products: defaultState.products,
       categories: defaultState.categories
@@ -168,7 +199,7 @@ if (typeof window !== 'undefined') {
   setInterval(() => { syncWithBackend() }, 10000)
 }
 
-export const orderStatuses = ['CONFIRMED','PREPARING','READY_FOR_PICKUP','ASSIGNED','PICKED_UP','OUT_FOR_DELIVERY','DELIVERED']
+export const orderStatuses = ['CONFIRMED','PREPARING','READY_FOR_PICKUP','ASSIGNED','PICKED_UP','OUT_FOR_DELIVERY','DELIVERED','CANCELLED']
 export const deliveryStatusFlow = {
   CONFIRMED: 'PREPARING',
   PREPARING: 'READY_FOR_PICKUP',
@@ -177,6 +208,7 @@ export const deliveryStatusFlow = {
   PICKED_UP: 'OUT_FOR_DELIVERY',
   OUT_FOR_DELIVERY: 'DELIVERED',
   DELIVERED: null,
+  CANCELLED: null,
 }
 export function getNextOrderStatus(status) { return deliveryStatusFlow[status] ?? null }
 export function getState() { return state }
@@ -389,4 +421,61 @@ export function updateDeliveryVerification(id, verificationStatus, feeStatus = '
 
 export function createBranch(newBranch) { const id = Math.max(...state.branches.map((branch) => Number(branch.id)), 0) + 1; const branch = { id, ...newBranch }; state = { ...state, branches: [...state.branches, branch] }; addNotification('admin','Branch created',`${branch.name} was added.`); persist(); return branch }
 export function resetPrototypeState() { state = clone(defaultState); persist() }
+
+// Support Agent Management Functions
+export function addSupportAgent(agentData) {
+  const id = `ag-${Math.floor(1000 + Math.random() * 9000)}`;
+  const newAgent = {
+    id,
+    name: agentData.name || 'Support Agent',
+    email: agentData.email || '',
+    mobile: agentData.mobile || '',
+    role: agentData.role || 'Support Specialist',
+    shift: agentData.shift || 'General (9 AM - 6 PM)',
+    status: agentData.status || 'Online',
+    cases: Number(agentData.cases || 0),
+    resolved: Number(agentData.resolved || 0),
+    createdAt: new Date().toISOString(),
+    ...agentData
+  };
+  state = {
+    ...state,
+    supportAgents: [newAgent, ...(state.supportAgents || [])]
+  };
+  addNotification('admin', '🎧 Support Agent Added', `${newAgent.name} (${newAgent.role}) was added to support staff.`);
+  addNotification('support', '🎧 New Agent Onboarded', `${newAgent.name} joined the Support Roster.`);
+  persist();
+  return newAgent;
+}
+
+export function updateSupportAgent(id, changes) {
+  state = {
+    ...state,
+    supportAgents: (state.supportAgents || []).map(a => a.id === id ? { ...a, ...changes } : a)
+  };
+  persist();
+}
+
+export function toggleSupportAgentStatus(id) {
+  state = {
+    ...state,
+    supportAgents: (state.supportAgents || []).map(a => {
+      if (a.id === id) {
+        const next = a.status === 'Online' ? 'Busy' : a.status === 'Busy' ? 'Offline' : 'Online';
+        return { ...a, status: next };
+      }
+      return a;
+    })
+  };
+  persist();
+}
+
+export function deleteSupportAgent(id) {
+  state = {
+    ...state,
+    supportAgents: (state.supportAgents || []).filter(a => a.id !== id)
+  };
+  addNotification('admin', '🗑️ Support Agent Removed', `Support agent ID ${id} was removed.`);
+  persist();
+}
 

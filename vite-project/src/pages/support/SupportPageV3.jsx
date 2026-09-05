@@ -11,7 +11,14 @@ import {
   CheckCircle2,
   Search,
   Users,
-  Eye
+  Eye,
+  ChevronDown,
+  Check,
+  Phone,
+  Mail,
+  Clock,
+  Trash2,
+  X
 } from 'lucide-react'
 import { usePrototypeContext } from '../../context/PrototypeContext'
 import {
@@ -19,7 +26,11 @@ import {
   addProduct,
   toggleProductAvailability,
   addIssue,
-  updateIssue
+  updateIssue,
+  addSupportAgent,
+  toggleSupportAgentStatus,
+  deleteSupportAgent,
+  orderStatuses
 } from '../../services/prototypeStore'
 import { NotificationPanel } from '../../components/notifications/NotificationPanel'
 import './support-content.css'
@@ -131,8 +142,12 @@ function Dashboard({ state }) {
               <Users size={15} />
             </div>
           </div>
-          <strong style={{ fontSize: 20, color: '#0f172a', fontWeight: 900 }}>0</strong>
-          <small style={{ color: '#16a34a', fontSize: 9.5, fontWeight: 700 }}>No agents online</small>
+          <strong style={{ fontSize: 20, color: '#0f172a', fontWeight: 900 }}>
+            {(state.supportAgents || []).filter(a => a.status === 'Online').length}
+          </strong>
+          <small style={{ color: '#16a34a', fontSize: 9.5, fontWeight: 700 }}>
+            {(state.supportAgents || []).length} Total Agents Active
+          </small>
         </div>
 
         <div
@@ -202,10 +217,22 @@ function Dashboard({ state }) {
   )
 }
 
+const statusOptionsList = [
+  { value: 'CONFIRMED', label: 'Confirmed', color: '#0284c7', bg: '#e0f2fe' },
+  { value: 'PREPARING', label: 'Preparing in Kitchen', color: '#d97706', bg: '#fef3c7' },
+  { value: 'READY_FOR_PICKUP', label: 'Ready for Pickup', color: '#9333ea', bg: '#f3e8ff' },
+  { value: 'ASSIGNED', label: 'Partner Assigned', color: '#4f46e5', bg: '#e0e7ff' },
+  { value: 'PICKED_UP', label: 'Picked Up', color: '#0891b2', bg: '#cffafe' },
+  { value: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', color: '#ea580c', bg: '#ffedd5' },
+  { value: 'DELIVERED', label: 'Delivered', color: '#16a34a', bg: '#dcfce7' },
+  { value: 'CANCELLED', label: 'Cancelled', color: '#dc2626', bg: '#fee2e2' }
+]
+
 function Orders({ orders }) {
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const [updatingOrderId, setUpdatingOrderId] = useState(null)
 
   const filtered = orders.filter(o => {
     const matchesSearch =
@@ -264,11 +291,12 @@ function Orders({ orders }) {
             <option value="PICKED_UP">Picked Up</option>
             <option value="OUT_FOR_DELIVERY">Out For Delivery</option>
             <option value="DELIVERED">Delivered</option>
+            <option value="CANCELLED">Cancelled</option>
           </select>
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', overflowY: 'visible', minHeight: 220 }}>
         <table>
           <thead>
             <tr>
@@ -289,7 +317,7 @@ function Orders({ orders }) {
                 <td>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <strong>{o.customer}</strong>
-                    <small style={{ fontSize: 9.5, color: '#64748b' }}>+91 98765 43210</small>
+                    <small style={{ fontSize: 9.5, color: '#64748b' }}>{o.customerMobile || '+91 98765 43210'}</small>
                   </div>
                 </td>
                 <td>{o.branch}</td>
@@ -302,7 +330,7 @@ function Orders({ orders }) {
                   </span>
                 </td>
                 <td>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', position: 'relative' }}>
                     <button
                       type="button"
                       style={{
@@ -321,17 +349,87 @@ function Orders({ orders }) {
                       <Eye size={12} /> Details
                     </button>
 
-                    {nextStatus[o.status] ? (
+                    <div style={{ position: 'relative' }}>
                       <button
-                        className="admin-action-btn"
-                        onClick={() => updateOrderStatus(o.id, nextStatus[o.status])}
-                        style={{ background: '#0284c7', color: '#fff', border: 0 }}
+                        type="button"
+                        onClick={() => setUpdatingOrderId(updatingOrderId === o.id ? null : o.id)}
+                        style={{
+                          padding: '4px 10px',
+                          border: '1px solid #0284c7',
+                          borderRadius: 6,
+                          background: updatingOrderId === o.id ? '#0369a1' : '#0284c7',
+                          color: '#ffffff',
+                          cursor: 'pointer',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          boxShadow: '0 1px 4px rgba(2,132,199,0.2)'
+                        }}
                       >
-                        Update →
+                        <span>Update</span>
+                        <ChevronDown size={12} />
                       </button>
-                    ) : (
-                      <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 800 }}>✓ Delivered</span>
-                    )}
+
+                      {/* Dropdown Options Menu */}
+                      {updatingOrderId === o.id && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            right: 0,
+                            top: '100%',
+                            marginTop: 4,
+                            background: '#ffffff',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: 10,
+                            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)',
+                            zIndex: 100,
+                            minWidth: 195,
+                            padding: '6px 0'
+                          }}
+                        >
+                          <div style={{ padding: '4px 12px 6px', borderBottom: '1px solid #f1f5f9', fontSize: 10, fontWeight: 800, color: '#64748b' }}>
+                            SELECT LIVE STATUS
+                          </div>
+                          {statusOptionsList.map(opt => {
+                            const isCurrent = o.status === opt.value
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={async () => {
+                                  await updateOrderStatus(o.id, opt.value)
+                                  setUpdatingOrderId(null)
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '7px 12px',
+                                  border: 0,
+                                  background: isCurrent ? opt.bg : 'transparent',
+                                  color: isCurrent ? opt.color : '#1e293b',
+                                  fontWeight: isCurrent ? 800 : 600,
+                                  fontSize: 11,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={e => { if (!isCurrent) e.currentTarget.style.background = '#f8fafc' }}
+                                onMouseLeave={e => { if (!isCurrent) e.currentTarget.style.background = 'transparent' }}
+                              >
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.color, display: 'inline-block' }} />
+                                  {opt.label}
+                                </span>
+                                {isCurrent && <Check size={13} color={opt.color} />}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -359,7 +457,7 @@ function Orders({ orders }) {
               background: '#fff',
               borderRadius: 18,
               padding: 24,
-              width: 'min(440px, 100%)',
+              width: 'min(460px, 100%)',
               boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
             }}
             onClick={e => e.stopPropagation()}
@@ -397,9 +495,49 @@ function Orders({ orders }) {
                 <span>Assigned Partner</span>
                 <strong>{selectedOrder.driver || 'Unassigned'}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #f1f5f9' }}>
                 <span>Payment Mode</span>
                 <strong>{selectedOrder.paymentMethod || 'UPI / Online'}</strong>
+              </div>
+            </div>
+
+            {/* Quick Status Update Section inside Modal */}
+            <div style={{ marginTop: 16, padding: 12, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <strong style={{ fontSize: 11.5, color: '#0f172a' }}>⚡ Update Status Live</strong>
+                <small style={{ fontSize: 10, color: '#64748b' }}>Click option to update</small>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+                {statusOptionsList.map(opt => {
+                  const isCurrent = selectedOrder.status === opt.value
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={async () => {
+                        await updateOrderStatus(selectedOrder.id, opt.value)
+                        setSelectedOrder(prev => ({ ...prev, status: opt.value }))
+                      }}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: 8,
+                        border: isCurrent ? `2px solid ${opt.color}` : '1px solid #cbd5e1',
+                        background: isCurrent ? opt.bg : '#fff',
+                        color: isCurrent ? opt.color : '#334155',
+                        fontSize: 10.5,
+                        fontWeight: isCurrent ? 800 : 600,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opt.label}</span>
+                      {isCurrent && <Check size={12} color={opt.color} />}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
@@ -408,7 +546,7 @@ function Orders({ orders }) {
               onClick={() => setSelectedOrder(null)}
               style={{
                 width: '100%',
-                marginTop: 20,
+                marginTop: 16,
                 padding: 10,
                 borderRadius: 10,
                 border: 0,
@@ -768,111 +906,338 @@ function Issues({ issues }) {
 }
 
 function Agents() {
-  const [agents, setAgents] = useState([])
+  const state = usePrototypeContext()
+  const agents = state.supportAgents || []
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [mobile, setMobile] = useState('')
+  const [role, setRole] = useState('Support Specialist')
+  const [shift, setShift] = useState('Morning (8 AM - 4 PM)')
+  const [status, setStatus] = useState('Online')
 
-  const toggleStatus = (index) => {
-    setAgents(prev => prev.map((a, i) => {
-      if (i === index) {
-        const next = a.status === 'Online' ? 'Busy' : a.status === 'Busy' ? 'Offline' : 'Online'
-        return { ...a, status: next }
-      }
-      return a
-    }))
+  const handleAddAgent = (e) => {
+    e.preventDefault()
+    if (!name.trim()) return
+    addSupportAgent({
+      name: name.trim(),
+      email: email.trim(),
+      mobile: mobile.trim(),
+      role,
+      shift,
+      status,
+      cases: 0,
+      resolved: 0
+    })
+    setName('')
+    setEmail('')
+    setMobile('')
+    setShowAddModal(false)
   }
 
   return (
     <div className="admin-table-card">
-      <div className="table-heading">
+      <div className="table-heading" style={{ flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Users size={18} style={{ color: '#0284c7' }} /> Support Agent Roster
           </h2>
-          <span style={{ fontSize: 11, color: '#64748b' }}>Real-time Shift &amp; Workload Monitoring</span>
+          <span style={{ fontSize: 11, color: '#64748b' }}>
+            {agents.length} Total Agents • Real-time Shift &amp; Workload Monitoring
+          </span>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
+          style={{
+            padding: '7px 14px',
+            background: '#0284c7',
+            color: '#fff',
+            border: 0,
+            borderRadius: 8,
+            fontSize: 11.5,
+            fontWeight: 800,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <Plus size={14} /> Add Agent
+        </button>
       </div>
 
       <div style={{ overflowX: 'auto' }}>
         <table>
           <thead>
             <tr>
-              <th>Agent Name</th>
+              <th>Agent Name &amp; Contact</th>
               <th>Role</th>
               <th>Shift</th>
               <th>Active Cases</th>
-              <th>Resolved Today</th>
-              <th>Status</th>
+              <th>Resolved</th>
+              <th>Live Status</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
             {agents.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: '#94a3b8' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '32px 16px', color: '#94a3b8' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                     <Users size={32} style={{ opacity: 0.3 }} />
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>No support agents</span>
-                    <span style={{ fontSize: 11 }}>Agent roster will appear here when agents are added.</span>
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>No support agents registered</span>
+                    <span style={{ fontSize: 11 }}>Agents added in Admin Panel or here will appear in this live roster.</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddModal(true)}
+                      style={{
+                        marginTop: 6,
+                        padding: '6px 12px',
+                        background: '#0284c7',
+                        color: '#fff',
+                        border: 0,
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + Add First Agent
+                    </button>
                   </div>
                 </td>
               </tr>
-            ) : agents.map((a, idx) => (
-              <tr key={a.name}>
-                <td>
-                  <strong>{a.name}</strong>
-                </td>
-                <td>{a.role}</td>
-                <td>
-                  <small style={{ color: '#64748b' }}>{a.shift}</small>
-                </td>
-                <td>
-                  <strong>{a.cases}</strong>
-                </td>
-                <td>{a.resolved}</td>
-                <td>
-                  <button
-                    onClick={() => toggleStatus(idx)}
-                    style={{
-                      border: 0,
-                      background: 'none',
-                      cursor: 'pointer',
-                      padding: 0
-                    }}
-                  >
-                    <span
+            ) : (
+              agents.map((a) => (
+                <tr key={a.id || a.name}>
+                  <td>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <strong style={{ color: '#0f172a' }}>{a.name}</strong>
+                      <small style={{ fontSize: 10, color: '#64748b' }}>{a.email || a.mobile || 'support@goldenbowl.com'}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>{a.role}</span>
+                  </td>
+                  <td>
+                    <small style={{ color: '#64748b', fontSize: 10.5 }}>{a.shift}</small>
+                  </td>
+                  <td>
+                    <strong style={{ color: '#0284c7' }}>{a.cases || 0}</strong>
+                  </td>
+                  <td>
+                    <strong style={{ color: '#16a34a' }}>{a.resolved || 0}</strong>
+                  </td>
+                  <td>
+                    <button
+                      onClick={() => toggleSupportAgentStatus(a.id)}
+                      title="Click to toggle status: Online / Busy / Offline"
                       style={{
-                        padding: '4px 10px',
-                        borderRadius: 12,
-                        fontSize: 10,
-                        fontWeight: 800,
-                        background:
-                          a.status === 'Online'
-                            ? '#f0fdf4'
-                            : a.status === 'Busy'
-                            ? '#fff7ed'
-                            : '#f1f5f9',
-                        color:
-                          a.status === 'Online'
-                            ? '#166534'
-                            : a.status === 'Busy'
-                            ? '#c2410c'
-                            : '#64748b',
-                        border: `1px solid ${
-                          a.status === 'Online'
-                            ? '#86efac'
-                            : a.status === 'Busy'
-                            ? '#fdba74'
-                            : '#cbd5e1'
-                        }`
+                        border: 0,
+                        background: 'none',
+                        cursor: 'pointer',
+                        padding: 0
                       }}
                     >
-                      {a.status === 'Online' ? '🟢 Online' : a.status === 'Busy' ? '🟠 Busy' : '⚪ Offline'}
-                    </span>
-                  </button>
-                </td>
-              </tr>
-            ))}
+                      <span
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 12,
+                          fontSize: 10,
+                          fontWeight: 800,
+                          background:
+                            a.status === 'Online'
+                              ? '#f0fdf4'
+                              : a.status === 'Busy'
+                              ? '#fff7ed'
+                              : '#f1f5f9',
+                          color:
+                            a.status === 'Online'
+                              ? '#166534'
+                              : a.status === 'Busy'
+                              ? '#c2410c'
+                              : '#64748b',
+                          border: `1px solid ${
+                            a.status === 'Online'
+                              ? '#86efac'
+                              : a.status === 'Busy'
+                              ? '#fdba74'
+                              : '#cbd5e1'
+                          }`
+                        }}
+                      >
+                        {a.status === 'Online' ? '🟢 Online' : a.status === 'Busy' ? '🟠 Busy' : '⚪ Offline'}
+                      </span>
+                    </button>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Remove support agent "${a.name}"?`)) {
+                          deleteSupportAgent(a.id)
+                        }
+                      }}
+                      style={{
+                        border: '1px solid #fecaca',
+                        background: '#fff5f5',
+                        color: '#dc2626',
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        fontSize: 11,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      <Trash2 size={12} /> Remove
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* Modal for adding agent */}
+      {showAddModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 100,
+            display: 'grid',
+            placeItems: 'center',
+            padding: 16
+          }}
+          onClick={() => setShowAddModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              padding: 24,
+              width: 'min(440px, 100%)',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Users size={18} style={{ color: '#0284c7' }} /> Add Support Agent
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                style={{ background: 'none', border: 0, cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddAgent} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                Agent Full Name *
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="e.g. Ananya Sharma"
+                  style={{ padding: 8, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 12 }}
+                />
+              </label>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  Official Email
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="agent@goldenbowl.com"
+                    style={{ padding: 8, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 12 }}
+                  />
+                </label>
+
+                <label style={{ fontSize: 11, fontWeight: 700, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  Mobile Number
+                  <input
+                    type="tel"
+                    value={mobile}
+                    onChange={e => setMobile(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    style={{ padding: 8, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 12 }}
+                  />
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  Designation / Role
+                  <select
+                    value={role}
+                    onChange={e => setRole(e.target.value)}
+                    style={{ padding: 8, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 12 }}
+                  >
+                    <option value="Support Specialist">Support Specialist</option>
+                    <option value="Senior Care Specialist">Senior Care Specialist</option>
+                    <option value="Escalation Lead">Escalation Lead</option>
+                    <option value="Order Dispatch Liaison">Order Dispatch Liaison</option>
+                  </select>
+                </label>
+
+                <label style={{ fontSize: 11, fontWeight: 700, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  Shift
+                  <select
+                    value={shift}
+                    onChange={e => setShift(e.target.value)}
+                    style={{ padding: 8, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 12 }}
+                  >
+                    <option value="Morning (8 AM - 4 PM)">Morning (8 AM - 4 PM)</option>
+                    <option value="Evening (4 PM - 12 AM)">Evening (4 PM - 12 AM)</option>
+                    <option value="Night (12 AM - 8 AM)">Night (12 AM - 8 AM)</option>
+                    <option value="General (9 AM - 6 PM)">General (9 AM - 6 PM)</option>
+                  </select>
+                </label>
+              </div>
+
+              <label style={{ fontSize: 11, fontWeight: 700, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                Initial Status
+                <select
+                  value={status}
+                  onChange={e => setStatus(e.target.value)}
+                  style={{ padding: 8, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 12 }}
+                >
+                  <option value="Online">Online</option>
+                  <option value="Busy">Busy</option>
+                  <option value="Offline">Offline</option>
+                </select>
+              </label>
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  style={{ flex: 1, padding: 10, borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ flex: 1, padding: 10, borderRadius: 8, border: 0, background: '#0284c7', color: '#fff', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Save Agent
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

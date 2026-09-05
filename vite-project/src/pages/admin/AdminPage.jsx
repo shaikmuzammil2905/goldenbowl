@@ -30,7 +30,10 @@ import {
   RefreshCw,
   Bike,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  Mail,
+  Phone
 } from 'lucide-react'
 import { usePrototypeContext } from '../../context/PrototypeContext'
 import {
@@ -47,7 +50,13 @@ import {
   updateDeliveryPartnerFee,
   waiveDeliveryPartnerFee,
   updateDeliveryVerification,
-  deleteDeliveryPartner
+  deleteDeliveryPartner,
+  addSupportAgent,
+  updateSupportAgent,
+  toggleSupportAgentStatus,
+  deleteSupportAgent,
+  addIssue,
+  updateIssue
 } from '../../services/prototypeStore'
 import { NotificationPanel } from '../../components/notifications/NotificationPanel'
 import { AdminReports } from './AdminReports'
@@ -97,9 +106,9 @@ export function AdminPage() {
       {path === 'products' && <Products />}
       {path === 'categories' && <Categories />}
       {path === 'branches' && <Branches />}
-      {path === 'customers' && <Customers />}
+      {path === 'customers' && <Customers liveOrders={liveOrders} />}
       {path === 'delivery' && <Delivery />}
-      {path === 'support' && <Support />}
+      {path === 'support' && <Support liveOrders={liveOrders} />}
       {path === 'reports' && <AdminReports />}
       {path === 'notifications' && <AdminNotifications />}
     </section>
@@ -852,7 +861,424 @@ function Categories() {
 
 
 function nextStatus(status) { const flow = { CONFIRMED: 'PREPARING', PREPARING: 'READY_FOR_PICKUP', READY_FOR_PICKUP: 'ASSIGNED', ASSIGNED: 'PICKED_UP', PICKED_UP: 'OUT_FOR_DELIVERY', OUT_FOR_DELIVERY: 'DELIVERED' }; return flow[status] }
-function Customers() { return <section className="admin-table-card"><div className="table-heading"><h2><Users size={18} style={{ color: '#b4811d' }} /> Customer Base</h2></div><p style={{ padding: 16, margin: 0, color: '#78716c' }}>Customer records will appear here.</p></section> }
+function Customers({ liveOrders = [] }) {
+  const { orders = [], users = [] } = usePrototypeContext()
+  const [filter, setFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [selectedCustomer, setSelectedCustomer] = useState(null)
+
+  // Merge and deduplicate orders
+  const allOrdersMap = new Map()
+  ;(Array.isArray(liveOrders) ? liveOrders : []).forEach(o => { if (o?.id) allOrdersMap.set(o.id, o) })
+  ;(Array.isArray(orders) ? orders : []).forEach(o => { if (o?.id && !allOrdersMap.has(o.id)) allOrdersMap.set(o.id, o) })
+  const combinedOrders = Array.from(allOrdersMap.values())
+
+  // Aggregate live customer profiles
+  const customerMap = new Map()
+
+  // 1. Registered users
+  users.forEach(u => {
+    if (u.role === 'customer' || !u.role) {
+      const key = (u.mobile || u.email || u.name || '').toLowerCase().trim()
+      if (key) {
+        customerMap.set(key, {
+          id: u.id,
+          name: u.name || 'Valued Customer',
+          mobile: u.mobile || '-',
+          email: u.email || '-',
+          ordersCount: 0,
+          totalSpent: 0,
+          orders: [],
+          lastOrderDate: u.createdAt || new Date().toISOString(),
+          preferredBranch: 'Bowl Central'
+        })
+      }
+    }
+  })
+
+  // 2. Orders customers
+  combinedOrders.forEach(o => {
+    const custName = o.customer || 'Valued Guest'
+    const mobile = o.customerMobile || '-'
+    const key = (mobile !== '-' ? mobile : custName).toLowerCase().trim()
+
+    if (!customerMap.has(key)) {
+      customerMap.set(key, {
+        id: `cust-${customerMap.size + 1}`,
+        name: custName,
+        mobile: mobile,
+        email: '-',
+        ordersCount: 0,
+        totalSpent: 0,
+        orders: [],
+        lastOrderDate: o.createdAt || new Date().toISOString(),
+        preferredBranch: o.branch || 'Bowl Central'
+      })
+    }
+
+    const record = customerMap.get(key)
+    record.ordersCount += 1
+    record.totalSpent += Number(o.total || 0)
+    record.orders.push(o)
+    if (o.branch) record.preferredBranch = o.branch
+    if (o.createdAt && new Date(o.createdAt) > new Date(record.lastOrderDate)) {
+      record.lastOrderDate = o.createdAt
+    }
+  })
+
+  const customerList = Array.from(customerMap.values()).map(c => {
+    let customerTier = 'Active Diner'
+    if (c.totalSpent >= 1500 || c.ordersCount >= 4) {
+      customerTier = 'VIP Member'
+    } else if (c.ordersCount >= 2) {
+      customerTier = 'Repeat Customer'
+    }
+    return { ...c, tier: customerTier }
+  })
+
+  const filtered = customerList.filter(c => {
+    const matchesQuery =
+      c.name.toLowerCase().includes(filter.toLowerCase()) ||
+      c.mobile.includes(filter) ||
+      c.email.toLowerCase().includes(filter.toLowerCase()) ||
+      c.preferredBranch.toLowerCase().includes(filter.toLowerCase())
+    const matchesStatus = statusFilter === 'ALL' || c.tier === statusFilter
+    return matchesQuery && matchesStatus
+  })
+
+  const totalSpentAll = customerList.reduce((acc, c) => acc + c.totalSpent, 0)
+  const totalOrdersPlaced = combinedOrders.length
+  const repeatCustomersCount = customerList.filter(c => c.ordersCount > 1).length
+  const repeatRate = customerList.length ? Math.round((repeatCustomersCount / customerList.length) * 100) : 0
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* ── KPI Summary Cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+        <div style={{ background: '#fff', border: '1px solid #eee4d2', borderLeft: '4px solid #dfa500', borderRadius: 14, padding: 14 }}>
+          <span style={{ fontSize: 11, color: '#78716c', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Users size={15} color="#dfa500" /> Total Customers
+          </span>
+          <strong style={{ fontSize: 20, color: '#1c1917', fontWeight: 900, marginTop: 4, display: 'block' }}>
+            {customerList.length} Diners
+          </strong>
+          <small style={{ color: '#16a34a', fontSize: 10, fontWeight: 700 }}>Live active directory</small>
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #eee4d2', borderLeft: '4px solid #0284c7', borderRadius: 14, padding: 14 }}>
+          <span style={{ fontSize: 11, color: '#78716c', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Package size={15} color="#0284c7" /> Orders Placed
+          </span>
+          <strong style={{ fontSize: 20, color: '#0284c7', fontWeight: 900, marginTop: 4, display: 'block' }}>
+            {totalOrdersPlaced} Orders
+          </strong>
+          <small style={{ color: '#64748b', fontSize: 10, fontWeight: 700 }}>Across all 3 branches</small>
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #eee4d2', borderLeft: '4px solid #16a34a', borderRadius: 14, padding: 14 }}>
+          <span style={{ fontSize: 11, color: '#78716c', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <DollarSign size={15} color="#16a34a" /> Lifetime Value
+          </span>
+          <strong style={{ fontSize: 20, color: '#16a34a', fontWeight: 900, marginTop: 4, display: 'block' }}>
+            ₹{totalSpentAll.toLocaleString('en-IN')}
+          </strong>
+          <small style={{ color: '#16a34a', fontSize: 10, fontWeight: 700 }}>Customer gross purchases</small>
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #eee4d2', borderLeft: '4px solid #9333ea', borderRadius: 14, padding: 14 }}>
+          <span style={{ fontSize: 11, color: '#78716c', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Sparkles size={15} color="#9333ea" /> Repeat Diner Rate
+          </span>
+          <strong style={{ fontSize: 20, color: '#9333ea', fontWeight: 900, marginTop: 4, display: 'block' }}>
+            {repeatRate}%
+          </strong>
+          <small style={{ color: '#9333ea', fontSize: 10, fontWeight: 700 }}>{repeatCustomersCount} returning customers</small>
+        </div>
+      </div>
+
+      {/* ── Customer Records Table Card ── */}
+      <section className="admin-table-card">
+        <div className="table-heading" style={{ flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#1c1917' }}>
+              <Users size={18} style={{ color: '#dfa500' }} /> Live Customer Base
+            </h2>
+            <span style={{ fontSize: 11.5, color: '#78716c' }}>
+              Real-time customer profiles, order frequencies, and lifetime order histories.
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <Search size={14} style={{ position: 'absolute', left: 8, color: '#94a3b8' }} />
+              <input
+                placeholder="Search name, phone, branch..."
+                value={filter}
+                onChange={e => setFilter(e.target.value)}
+                style={{
+                  paddingLeft: 28,
+                  height: 32,
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  fontSize: 11.5
+                }}
+              />
+            </div>
+
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              style={{
+                height: 32,
+                padding: '0 8px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                fontSize: 11.5,
+                background: '#f8fafc',
+                fontWeight: 700
+              }}
+            >
+              <option value="ALL">All Diner Tiers</option>
+              <option value="VIP Member">VIP Members</option>
+              <option value="Repeat Customer">Repeat Diners</option>
+              <option value="Active Diner">Active Diners</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Customer Name</th>
+                <th>Phone &amp; Contact</th>
+                <th>Branch Outlet</th>
+                <th>Total Orders</th>
+                <th>Total Spend</th>
+                <th>Diner Tier</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '36px 16px', color: '#94a3b8' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <Users size={30} style={{ opacity: 0.3 }} />
+                      <strong style={{ fontSize: 13, color: '#64748b' }}>No customer records found</strong>
+                      <span style={{ fontSize: 11 }}>Customer profiles automatically populate as orders are placed.</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map(c => (
+                  <tr key={c.id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: '50%',
+                            background: '#fef3c7',
+                            color: '#b45309',
+                            fontWeight: 900,
+                            display: 'grid',
+                            placeItems: 'center',
+                            fontSize: 12
+                          }}
+                        >
+                          {c.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <strong style={{ color: '#1c1917', fontSize: 12.5 }}>{c.name}</strong>
+                          <span style={{ display: 'block', fontSize: 10, color: '#78716c' }}>
+                            Last active: {new Date(c.lastOrderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div>
+                        <strong style={{ fontSize: 11.5, color: '#334155' }}>{c.mobile}</strong>
+                        {c.email !== '-' && <span style={{ display: 'block', fontSize: 10, color: '#78716c' }}>{c.email}</span>}
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: 11.5, color: '#475569' }}>{c.preferredBranch}</span>
+                    </td>
+                    <td>
+                      <strong style={{ color: '#0284c7', fontSize: 12.5 }}>{c.ordersCount} orders</strong>
+                    </td>
+                    <td>
+                      <strong style={{ color: '#16a34a', fontSize: 13 }}>₹{c.totalSpent.toLocaleString('en-IN')}</strong>
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 12,
+                          fontSize: 10,
+                          fontWeight: 800,
+                          background:
+                            c.tier === 'VIP Member'
+                              ? '#fef3c7'
+                              : c.tier === 'Repeat Customer'
+                              ? '#e0f2fe'
+                              : '#f1f5f9',
+                          color:
+                            c.tier === 'VIP Member'
+                              ? '#92400e'
+                              : c.tier === 'Repeat Customer'
+                              ? '#0369a1'
+                              : '#475569',
+                          border: `1px solid ${
+                            c.tier === 'VIP Member'
+                              ? '#fde68a'
+                              : c.tier === 'Repeat Customer'
+                              ? '#bae6fd'
+                              : '#e2e8f0'
+                          }`
+                        }}
+                      >
+                        {c.tier === 'VIP Member' ? '👑 VIP' : c.tier === 'Repeat Customer' ? '⭐ Repeat' : '✓ Active'}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCustomer(c)}
+                        style={{
+                          padding: '5px 10px',
+                          borderRadius: 6,
+                          border: '1px solid #cbd5e1',
+                          background: '#fff',
+                          color: '#334155',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                      >
+                        <Eye size={12} /> View Orders ({c.orders.length})
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ── Customer Orders Modal ── */}
+      {selectedCustomer && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 100,
+            display: 'grid',
+            placeItems: 'center',
+            padding: 16
+          }}
+          onClick={() => setSelectedCustomer(null)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              padding: 24,
+              width: 'min(500px, 100%)',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17, color: '#1c1917' }}>{selectedCustomer.name}</h3>
+                <span style={{ fontSize: 11, color: '#78716c' }}>
+                  {selectedCustomer.mobile} • {selectedCustomer.ordersCount} Total Orders • ₹{selectedCustomer.totalSpent.toLocaleString('en-IN')} Spent
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCustomer(null)}
+                style={{ background: 'none', border: 0, fontSize: 18, cursor: 'pointer', color: '#64748b' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <strong style={{ fontSize: 12, color: '#0f172a' }}>Order History</strong>
+              {selectedCustomer.orders.length === 0 ? (
+                <p style={{ fontSize: 11, color: '#94a3b8', margin: '8px 0' }}>No placed orders yet.</p>
+              ) : (
+                selectedCustomer.orders.map(order => (
+                  <div
+                    key={order.id}
+                    style={{
+                      padding: 12,
+                      borderRadius: 10,
+                      border: '1px solid #e2e8f0',
+                      background: '#f8fafc',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: 12, color: '#0f172a' }}>#{order.id}</strong>
+                      <span style={{ display: 'block', fontSize: 10.5, color: '#64748b' }}>
+                        {order.branch} • {order.items ? `${order.items.length} items` : 'Bowl Meal'}
+                      </span>
+                      <small style={{ fontSize: 9.5, color: '#94a3b8' }}>
+                        {new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                      </small>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <strong style={{ color: '#16a34a', fontSize: 13 }}>₹{order.total}</strong>
+                      <span
+                        className={`table-status ${order.status.toLowerCase()}`}
+                        style={{ display: 'block', marginTop: 4, fontSize: 9.5 }}
+                      >
+                        {order.status.replaceAll('_', ' ')}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSelectedCustomer(null)}
+              style={{
+                width: '100%',
+                marginTop: 20,
+                padding: 10,
+                borderRadius: 10,
+                border: 0,
+                background: '#dfa500',
+                color: '#1c1208',
+                fontWeight: 900,
+                cursor: 'pointer'
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 function Delivery() {
   const { deliveryPartners = [], deliverySettings = {} } = usePrototypeContext()
   const [filter, setFilter] = useState('')
@@ -1581,7 +2007,743 @@ function Delivery() {
     </div>
   )
 }
-function Support() { return <section className="admin-table-card"><div className="table-heading"><h2><Headphones size={18} style={{ color: '#b4811d' }} /> Support Team Oversight</h2></div><p style={{ padding: 16, margin: 0, color: '#78716c' }}>Support workspace.</p></section> }
+function Support({ liveOrders = [] }) {
+  const { supportAgents = [], issues = [], orders = [] } = usePrototypeContext()
+  const [activeTab, setActiveTab] = useState('agents')
+  const [agentSearch, setAgentSearch] = useState('')
+  const [showAddAgentModal, setShowAddAgentModal] = useState(false)
+  const [toast, setToast] = useState('')
+
+  // Form states for adding agent
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [mobile, setMobile] = useState('')
+  const [role, setRole] = useState('Support Specialist')
+  const [shift, setShift] = useState('Morning (8 AM - 4 PM)')
+  const [status, setStatus] = useState('Online')
+
+  // Live order status update menu
+  const [updatingOrderId, setUpdatingOrderId] = useState(null)
+
+  // Merge orders
+  const allOrdersMap = new Map()
+  ;(Array.isArray(liveOrders) ? liveOrders : []).forEach(o => { if (o?.id) allOrdersMap.set(o.id, o) })
+  ;(Array.isArray(orders) ? orders : []).forEach(o => { if (o?.id && !allOrdersMap.has(o.id)) allOrdersMap.set(o.id, o) })
+  const combinedOrders = Array.from(allOrdersMap.values())
+
+  const handleAddAgent = (e) => {
+    e.preventDefault()
+    if (!name.trim()) return
+    const newAgent = addSupportAgent({
+      name: name.trim(),
+      email: email.trim(),
+      mobile: mobile.trim(),
+      role,
+      shift,
+      status,
+      cases: 0,
+      resolved: 0
+    })
+    setToast(`✓ Agent "${newAgent.name}" added! Visible in Support Panel & Admin Console.`)
+    setTimeout(() => setToast(''), 4000)
+    setName('')
+    setEmail('')
+    setMobile('')
+    setShowAddAgentModal(false)
+  }
+
+  const handleDeleteAgent = (id, agentName) => {
+    if (window.confirm(`Are you sure you want to remove support agent "${agentName}"?`)) {
+      deleteSupportAgent(id)
+      setToast(`Agent "${agentName}" removed.`)
+      setTimeout(() => setToast(''), 3000)
+    }
+  }
+
+  const filteredAgents = supportAgents.filter(a =>
+    a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
+    a.role.toLowerCase().includes(agentSearch.toLowerCase()) ||
+    (a.email && a.email.toLowerCase().includes(agentSearch.toLowerCase())) ||
+    (a.mobile && a.mobile.includes(agentSearch))
+  )
+
+  const onlineAgentsCount = supportAgents.filter(a => a.status === 'Online').length
+  const openIssuesCount = issues.filter(i => i.status !== 'RESOLVED').length
+  const activeOrdersCount = combinedOrders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED').length
+
+  const statusOptions = [
+    { value: 'CONFIRMED', label: 'Confirmed', color: '#0284c7', bg: '#e0f2fe' },
+    { value: 'PREPARING', label: 'Preparing', color: '#d97706', bg: '#fef3c7' },
+    { value: 'READY_FOR_PICKUP', label: 'Ready for Pickup', color: '#9333ea', bg: '#f3e8ff' },
+    { value: 'ASSIGNED', label: 'Partner Assigned', color: '#4f46e5', bg: '#e0e7ff' },
+    { value: 'PICKED_UP', label: 'Picked Up', color: '#0891b2', bg: '#cffafe' },
+    { value: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', color: '#ea580c', bg: '#ffedd5' },
+    { value: 'DELIVERED', label: 'Delivered', color: '#16a34a', bg: '#dcfce7' },
+    { value: 'CANCELLED', label: 'Cancelled', color: '#dc2626', bg: '#fee2e2' }
+  ]
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {toast && (
+        <div style={{ padding: '10px 16px', background: '#eaf7ed', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: 10, fontSize: 12.5, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <CheckCircle2 size={16} /> {toast}
+        </div>
+      )}
+
+      {/* ── KPI Metrics Grid ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+        <div style={{ background: '#fff', border: '1px solid #eee4d2', borderLeft: '4px solid #b4811d', borderRadius: 14, padding: 14 }}>
+          <span style={{ fontSize: 11, color: '#78716c', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Users size={15} color="#b4811d" /> Total Agents
+          </span>
+          <strong style={{ fontSize: 20, color: '#1c1917', fontWeight: 900, marginTop: 4, display: 'block' }}>
+            {supportAgents.length} Agents
+          </strong>
+          <small style={{ color: '#16a34a', fontSize: 10, fontWeight: 700 }}>{onlineAgentsCount} online on shift</small>
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #eee4d2', borderLeft: '4px solid #16a34a', borderRadius: 14, padding: 14 }}>
+          <span style={{ fontSize: 11, color: '#78716c', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Headphones size={15} color="#16a34a" /> Live Care Desk
+          </span>
+          <strong style={{ fontSize: 20, color: '#16a34a', fontWeight: 900, marginTop: 4, display: 'block' }}>
+            24/7 Active
+          </strong>
+          <small style={{ color: '#64748b', fontSize: 10, fontWeight: 700 }}>Synchronized with Support Panel</small>
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #eee4d2', borderLeft: '4px solid #ef4444', borderRadius: 14, padding: 14 }}>
+          <span style={{ fontSize: 11, color: '#78716c', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <AlertCircle size={15} color="#ef4444" /> Open Tickets
+          </span>
+          <strong style={{ fontSize: 20, color: '#ef4444', fontWeight: 900, marginTop: 4, display: 'block' }}>
+            {openIssuesCount} Tickets
+          </strong>
+          <small style={{ color: '#64748b', fontSize: 10, fontWeight: 700 }}>Customer complaints</small>
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #eee4d2', borderLeft: '4px solid #0284c7', borderRadius: 14, padding: 14 }}>
+          <span style={{ fontSize: 11, color: '#78716c', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Package size={15} color="#0284c7" /> Monitored Orders
+          </span>
+          <strong style={{ fontSize: 20, color: '#0284c7', fontWeight: 900, marginTop: 4, display: 'block' }}>
+            {activeOrdersCount} Active
+          </strong>
+          <small style={{ color: '#0284c7', fontSize: 10, fontWeight: 700 }}>In kitchen &amp; delivery</small>
+        </div>
+      </div>
+
+      {/* ── Sub-navigation Tabs ── */}
+      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #e2d8c8', paddingBottom: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('agents')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 8,
+            border: activeTab === 'agents' ? '2px solid #b4811d' : '1px solid #e2d8c8',
+            background: activeTab === 'agents' ? '#fffdf5' : '#fff',
+            color: activeTab === 'agents' ? '#9a3412' : '#64748b',
+            fontWeight: 800,
+            fontSize: 12,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <Users size={14} /> Agent Management ({supportAgents.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('tickets')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 8,
+            border: activeTab === 'tickets' ? '2px solid #b4811d' : '1px solid #e2d8c8',
+            background: activeTab === 'tickets' ? '#fffdf5' : '#fff',
+            color: activeTab === 'tickets' ? '#9a3412' : '#64748b',
+            fontWeight: 800,
+            fontSize: 12,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <Headphones size={14} /> Live Customer Tickets ({openIssuesCount})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('live_orders')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 8,
+            border: activeTab === 'live_orders' ? '2px solid #b4811d' : '1px solid #e2d8c8',
+            background: activeTab === 'live_orders' ? '#fffdf5' : '#fff',
+            color: activeTab === 'live_orders' ? '#9a3412' : '#64748b',
+            fontWeight: 800,
+            fontSize: 12,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <Package size={14} /> Live Order Queue ({activeOrdersCount})
+        </button>
+      </div>
+
+      {/* ── TAB 1: AGENT MANAGEMENT ── */}
+      {activeTab === 'agents' && (
+        <section className="admin-table-card">
+          <div className="table-heading" style={{ flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#1c1917' }}>
+                <Users size={18} style={{ color: '#b4811d' }} /> Support Agent Management
+              </h2>
+              <span style={{ fontSize: 11.5, color: '#78716c' }}>
+                Onboard and manage customer support personnel. Agents added here are instantly available in the Support Panel.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <Search size={14} style={{ position: 'absolute', left: 8, color: '#94a3b8' }} />
+                <input
+                  placeholder="Search agents..."
+                  value={agentSearch}
+                  onChange={e => setAgentSearch(e.target.value)}
+                  style={{
+                    paddingLeft: 28,
+                    height: 32,
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    fontSize: 11.5
+                  }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddAgentModal(true)}
+                style={{
+                  padding: '7px 14px',
+                  background: '#b4811d',
+                  color: '#fff',
+                  border: 0,
+                  borderRadius: 8,
+                  fontSize: 11.5,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <Plus size={14} /> Add Support Agent
+              </button>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Agent Name</th>
+                  <th>Contact Info</th>
+                  <th>Designation / Role</th>
+                  <th>Shift Schedule</th>
+                  <th>Cases Handled</th>
+                  <th>Live Shift Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAgents.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '36px 16px', color: '#94a3b8' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                        <Users size={32} style={{ opacity: 0.3 }} />
+                        <strong style={{ fontSize: 13, color: '#64748b' }}>No support agents found</strong>
+                        <span style={{ fontSize: 11 }}>Click "+ Add Support Agent" above to onboard support team members.</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAgents.map(a => (
+                    <tr key={a.id || a.name}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: '50%',
+                              background: '#e0f2fe',
+                              color: '#0369a1',
+                              fontWeight: 900,
+                              display: 'grid',
+                              placeItems: 'center',
+                              fontSize: 12
+                            }}
+                          >
+                            {a.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <strong style={{ color: '#1c1917', fontSize: 12.5 }}>{a.name}</strong>
+                            <small style={{ display: 'block', fontSize: 9.5, color: '#78716c' }}>ID: {a.id}</small>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 11, color: '#334155', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Mail size={11} color="#64748b" /> {a.email || 'support@goldenbowl.com'}
+                          </span>
+                          {a.mobile && (
+                            <span style={{ fontSize: 10.5, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Phone size={10} color="#94a3b8" /> {a.mobile}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <strong style={{ color: '#0f172a', fontSize: 12 }}>{a.role}</strong>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: 11, color: '#475569' }}>{a.shift}</span>
+                      </td>
+                      <td>
+                        <div>
+                          <strong style={{ color: '#0284c7', fontSize: 12 }}>{a.cases || 0} active</strong>
+                          <span style={{ display: 'block', fontSize: 10, color: '#16a34a', fontWeight: 700 }}>
+                            ✓ {a.resolved || 0} resolved
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(a.id)}
+                          title="Click to toggle: Online / Busy / Offline"
+                          style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          <span
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: 12,
+                              fontSize: 10,
+                              fontWeight: 800,
+                              background:
+                                a.status === 'Online'
+                                  ? '#f0fdf4'
+                                  : a.status === 'Busy'
+                                  ? '#fff7ed'
+                                  : '#f1f5f9',
+                              color:
+                                a.status === 'Online'
+                                  ? '#166534'
+                                  : a.status === 'Busy'
+                                  ? '#c2410c'
+                                  : '#64748b',
+                              border: `1px solid ${
+                                a.status === 'Online'
+                                  ? '#86efac'
+                                  : a.status === 'Busy'
+                                  ? '#fdba74'
+                                  : '#cbd5e1'
+                              }`
+                            }}
+                          >
+                            {a.status === 'Online' ? '🟢 Online' : a.status === 'Busy' ? '🟠 Busy' : '⚪ Offline'}
+                          </span>
+                        </button>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAgent(a.id, a.name)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: 6,
+                              border: '1px solid #fecaca',
+                              background: '#fff5f5',
+                              color: '#dc2626',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4
+                            }}
+                          >
+                            <Trash2 size={12} /> Remove
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ── TAB 2: LIVE CUSTOMER TICKETS ── */}
+      {activeTab === 'tickets' && (
+        <section className="admin-table-card">
+          <div className="table-heading">
+            <div>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#1c1917' }}>
+                <Headphones size={18} style={{ color: '#b4811d' }} /> Live Customer Support Tickets
+              </h2>
+              <span style={{ fontSize: 11.5, color: '#78716c' }}>
+                Incoming customer queries, complaints, and ticket resolution desk.
+              </span>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticket ID</th>
+                  <th>Customer Name</th>
+                  <th>Subject / Issue</th>
+                  <th>Priority</th>
+                  <th>Assigned Agent</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {issues.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '36px 16px', color: '#94a3b8' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                        <Headphones size={30} style={{ opacity: 0.3 }} />
+                        <strong style={{ fontSize: 13, color: '#64748b' }}>No open customer tickets</strong>
+                        <span style={{ fontSize: 11 }}>All customer queries are currently answered and resolved.</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  issues.map(i => (
+                    <tr key={i.id}>
+                      <td><strong>#{i.id.slice(-6)}</strong></td>
+                      <td><strong>{i.customer}</strong></td>
+                      <td><span style={{ fontSize: 11.5, color: '#334155' }}>{i.message || i.subject || 'Order issue'}</span></td>
+                      <td>
+                        <span
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: 10,
+                            fontSize: 10,
+                            fontWeight: 800,
+                            background: i.priority === 'Urgent' ? '#fee2e2' : i.priority === 'High' ? '#ffedd5' : '#f0fdf4',
+                            color: i.priority === 'Urgent' ? '#dc2626' : i.priority === 'High' ? '#c2410c' : '#166534'
+                          }}
+                        >
+                          {i.priority || 'Normal'}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: 11, color: '#475569', fontWeight: 700 }}>
+                          {i.assignedAgent || 'Unassigned'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`table-status ${i.status.toLowerCase()}`}>
+                          {i.status}
+                        </span>
+                      </td>
+                      <td>
+                        {i.status !== 'RESOLVED' ? (
+                          <button
+                            type="button"
+                            onClick={() => updateIssue(i.id, 'RESOLVED')}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: 6,
+                              border: 0,
+                              background: '#16a34a',
+                              color: '#fff',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ✓ Resolve
+                          </button>
+                        ) : (
+                          <span style={{ color: '#16a34a', fontWeight: 800, fontSize: 11 }}>✓ Resolved</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ── TAB 3: LIVE ORDER QUEUE OVERSIGHT ── */}
+      {activeTab === 'live_orders' && (
+        <section className="admin-table-card">
+          <div className="table-heading">
+            <div>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#1c1917' }}>
+                <Package size={18} style={{ color: '#b4811d' }} /> Support Order Monitoring Queue
+              </h2>
+              <span style={{ fontSize: 11.5, color: '#78716c' }}>
+                Live active order pipeline with instant status change controls.
+              </span>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto', overflowY: 'visible', minHeight: 220 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Customer</th>
+                  <th>Branch</th>
+                  <th>Total</th>
+                  <th>Current Status</th>
+                  <th>Change Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {combinedOrders.map(o => (
+                  <tr key={o.id}>
+                    <td><strong>#{o.id}</strong></td>
+                    <td>
+                      <div>
+                        <strong>{o.customer}</strong>
+                        <small style={{ display: 'block', fontSize: 10, color: '#78716c' }}>{o.customerMobile || '-'}</small>
+                      </div>
+                    </td>
+                    <td>{o.branch}</td>
+                    <td><strong>₹{o.total}</strong></td>
+                    <td>
+                      <span className={`table-status ${o.status.toLowerCase()}`}>
+                        {o.status.replaceAll('_', ' ')}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ position: 'relative', display: 'inline-block' }}>
+                        <button
+                          type="button"
+                          onClick={() => setUpdatingOrderId(updatingOrderId === o.id ? null : o.id)}
+                          style={{
+                            padding: '4px 10px',
+                            border: '1px solid #b4811d',
+                            borderRadius: 6,
+                            background: updatingOrderId === o.id ? '#9a3412' : '#b4811d',
+                            color: '#ffffff',
+                            cursor: 'pointer',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                        >
+                          <span>Update</span>
+                          <ChevronDown size={12} />
+                        </button>
+
+                        {/* Status Options Menu */}
+                        {updatingOrderId === o.id && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              right: 0,
+                              top: '100%',
+                              marginTop: 4,
+                              background: '#ffffff',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: 10,
+                              boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)',
+                              zIndex: 100,
+                              minWidth: 195,
+                              padding: '6px 0'
+                            }}
+                          >
+                            <div style={{ padding: '4px 12px 6px', borderBottom: '1px solid #f1f5f9', fontSize: 10, fontWeight: 800, color: '#64748b' }}>
+                              SELECT STATUS
+                            </div>
+                            {statusOptions.map(opt => {
+                              const isCurrent = o.status === opt.value
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={async () => {
+                                    await updateOrderStatus(o.id, opt.value)
+                                    setUpdatingOrderId(null)
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '7px 12px',
+                                    border: 0,
+                                    background: isCurrent ? opt.bg : 'transparent',
+                                    color: isCurrent ? opt.color : '#1e293b',
+                                    fontWeight: isCurrent ? 800 : 600,
+                                    fontSize: 11,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    textAlign: 'left'
+                                  }}
+                                >
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.color }} />
+                                    {opt.label}
+                                  </span>
+                                  {isCurrent && <Check size={13} color={opt.color} />}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ── MODAL: ADD SUPPORT AGENT ── */}
+      {showAddAgentModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 100,
+            display: 'grid',
+            placeItems: 'center',
+            padding: 16
+          }}
+          onClick={() => setShowAddAgentModal(false)}
+        >
+          <form
+            className="admin-modal-card"
+            style={{ maxWidth: 460 }}
+            onSubmit={handleAddAgent}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 17, color: '#1c1917' }}>Add Support Agent</h2>
+                <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#78716c' }}>
+                  New agent will be synced across the Admin Console and Support Operations Desk.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddAgentModal(false)}
+                style={{ border: 0, background: 'transparent', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <label className="admin-form-field">
+                <span>Agent Full Name *</span>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="e.g. Rahul Sharma"
+                />
+              </label>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label className="admin-form-field">
+                  <span>Official Email</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="rahul@goldenbowl.com"
+                  />
+                </label>
+
+                <label className="admin-form-field">
+                  <span>Mobile Contact</span>
+                  <input
+                    type="tel"
+                    value={mobile}
+                    onChange={e => setMobile(e.target.value)}
+                    placeholder="+91 98765 43210"
+                  />
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label className="admin-form-field">
+                  <span>Designation / Role</span>
+                  <select value={role} onChange={e => setRole(e.target.value)}>
+                    <option value="Support Specialist">Support Specialist</option>
+                    <option value="Senior Care Specialist">Senior Care Specialist</option>
+                    <option value="Escalation Lead">Escalation Lead</option>
+                    <option value="Order Dispatch Liaison">Order Dispatch Liaison</option>
+                  </select>
+                </label>
+
+                <label className="admin-form-field">
+                  <span>Shift Schedule</span>
+                  <select value={shift} onChange={e => setShift(e.target.value)}>
+                    <option value="Morning (8 AM - 4 PM)">Morning (8 AM - 4 PM)</option>
+                    <option value="Evening (4 PM - 12 AM)">Evening (4 PM - 12 AM)</option>
+                    <option value="Night (12 AM - 8 AM)">Night (12 AM - 8 AM)</option>
+                    <option value="General (9 AM - 6 PM)">General (9 AM - 6 PM)</option>
+                  </select>
+                </label>
+              </div>
+
+              <label className="admin-form-field">
+                <span>Initial Shift Status</span>
+                <select value={status} onChange={e => setStatus(e.target.value)}>
+                  <option value="Online">Online</option>
+                  <option value="Busy">Busy</option>
+                  <option value="Offline">Offline</option>
+                </select>
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+              <button type="button" className="secondary-btn" onClick={() => setShowAddAgentModal(false)}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="admin-action-btn"
+                style={{ padding: '8px 18px', background: '#b4811d', color: '#fff', border: 0 }}
+              >
+                Save &amp; Onboard Agent
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  )
+}
 function AdminNotifications() { return <section className="admin-table-card"><div className="table-heading"><h2><FileText size={18} style={{ color: '#b4811d' }} /> Notifications</h2></div><NotificationPanel role="admin" /></section> }
 
 export default AdminPage
