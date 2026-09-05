@@ -5,6 +5,7 @@ import { branches } from '../../data/mockData'
 import { usePrototypeContext } from '../../context/PrototypeContext'
 import { orderApi } from '../../services/api/orderApi'
 import { addressApi } from '../../services/api/addressApi'
+import { savedPaymentApi } from '../../services/api/savedPaymentApi'
 import { NotificationPanel } from '../../components/notifications/NotificationPanel'
 import { openRazorpayCheckout, RAZORPAY_KEY_ID } from '../../services/razorpay'
 import { authStorage } from '../../services/storage/authStorage'
@@ -761,11 +762,18 @@ function Profile() {
     }
   })
   const [addresses, setAddresses] = React.useState([])
+  const [paymentMethods, setPaymentMethods] = React.useState([])
+  const [paymentError, setPaymentError] = React.useState(null)
+  const [showAddPayment, setShowAddPayment] = React.useState(false)
 
   React.useEffect(() => {
     if (user.id) {
       addressApi.getAddresses(user.id).then(res => {
         if (res?.data) setAddresses(res.data)
+      }).catch(err => console.error(err));
+
+      savedPaymentApi.getSavedPayments(user.id).then(res => {
+        if (res?.data) setPaymentMethods(res.data)
       }).catch(err => console.error(err));
     }
   }, [user.id])
@@ -828,11 +836,43 @@ function Profile() {
       setAddressError(err.message || "Failed to delete address");
     }
   }
-  const [paymentMethods] = React.useState([
-    { id: 1, type: 'UPI', name: 'Google Pay', detail: 'priya@okicici', isDefault: true },
-    { id: 2, type: 'Card', name: 'HDFC Credit Card', detail: '•••• 4092', isDefault: false },
-    { id: 3, type: 'Wallet', name: 'Paytm Wallet', detail: '₹450 Balance', isDefault: false },
-  ])
+
+  const handleSavePayment = async (e) => {
+    e.preventDefault()
+    setPaymentError(null)
+    if (!user.id) {
+      setPaymentError("Authentication error: User ID missing.")
+      return;
+    }
+    const formData = new FormData(e.target)
+    const type = formData.get('type') || 'UPI'
+    const name = formData.get('name')
+    const detail = formData.get('detail')
+    try {
+      const res = await savedPaymentApi.createSavedPayment(user.id, {
+        type,
+        name,
+        detail,
+        isDefault: paymentMethods.length === 0,
+      })
+      if (res?.data) {
+        setPaymentMethods(prev => [res.data, ...prev])
+        setShowAddPayment(false)
+      }
+    } catch (err) {
+      setPaymentError(err.message || "Failed to save payment method.")
+    }
+  }
+
+  const handleDeletePayment = async (id) => {
+    if (!user.id || !window.confirm("Remove this payment method?")) return;
+    try {
+      await savedPaymentApi.deleteSavedPayment(user.id, id);
+      setPaymentMethods(prev => prev.filter(p => p.id !== id));
+    } catch (err) {
+      setPaymentError(err.message || "Failed to delete payment method.");
+    }
+  }
 
   const handleSaveProfile = (e) => {
     e.preventDefault()
@@ -1009,15 +1049,15 @@ function Profile() {
                           <option value="Other">Other</option>
                         </select>
                       </label>
-                      <label><span>Postal Code</span><input type="text" name="postalCode" defaultValue={parsed.postalCode} required placeholder="560001"/></label>
+                      <label><span>Postal Code</span><input type="text" name="postalCode" defaultValue={parsed.postalCode || ''} required placeholder="e.g. 522003"/></label>
                     </div>
-                    <label><span>Full Name</span><input type="text" name="name" defaultValue={parsed.name} required /></label>
-                    <label><span>Phone Number</span><input type="tel" name="phone" defaultValue={parsed.phone} required /></label>
-                    <label><span>Address Line</span><input type="text" name="addressLine" defaultValue={parsed.addressLine} required placeholder="Flat, House no, Building"/></label>
-                    <label><span>Area / Locality</span><input type="text" name="area" defaultValue={parsed.area} required placeholder="Indiranagar"/></label>
+                    <label><span>Full Name</span><input type="text" name="name" defaultValue={parsed.name || ''} required placeholder="Full Name" /></label>
+                    <label><span>Phone Number</span><input type="tel" name="phone" defaultValue={parsed.phone || ''} required placeholder="10-digit mobile number" /></label>
+                    <label><span>Address Line</span><input type="text" name="addressLine" defaultValue={parsed.addressLine || ''} required placeholder="Flat, House no, Building, Street"/></label>
+                    <label><span>Area / Locality</span><input type="text" name="area" defaultValue={parsed.area || ''} required placeholder="Area, Locality or Landmark"/></label>
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                      <label><span>City</span><input type="text" name="city" defaultValue={parsed.city||'Bengaluru'} required /></label>
-                      <label><span>State</span><input type="text" name="state" defaultValue={parsed.state||'Karnataka'} required /></label>
+                      <label><span>City</span><input type="text" name="city" defaultValue={parsed.city || ''} required placeholder="City" /></label>
+                      <label><span>State</span><input type="text" name="state" defaultValue={parsed.state || ''} required placeholder="State" /></label>
                     </div>
                     <button type="submit" className="route-primary" style={{marginTop:10}}>Save Address</button>
                   </>
@@ -1030,22 +1070,71 @@ function Profile() {
 
       {/* Payments Modal */}
       {activeModal === 'payments' && (
-        <div className="branch-modal-overlay" onClick={() => setActiveModal(null)}>
+        <div className="branch-modal-overlay" onClick={() => { setActiveModal(null); setShowAddPayment(false); setPaymentError(null); }}>
           <div className="branch-modal" onClick={e => e.stopPropagation()}>
             <div className="branch-modal-head">
               <h3>Saved Payments</h3>
-              <button type="button" className="close-btn" onClick={() => setActiveModal(null)}>✕</button>
+              <button type="button" className="close-btn" onClick={() => { setActiveModal(null); setShowAddPayment(false); setPaymentError(null); }}>✕</button>
             </div>
-            <div className="branch-modal-list">
-              {paymentMethods.map(p => (
-                <div key={p.id} className="branch-option selected">
-                  <div className="branch-meta">
-                    <strong>💳 {p.name}</strong>
-                    <span>{p.detail}</span>
-                  </div>
-                  {p.isDefault && <span className="offer-badge" style={{ fontSize: 8 }}>DEFAULT</span>}
+            <div className="branch-modal-list" style={{ padding: '12px 16px', maxHeight: '60vh', overflowY: 'auto' }}>
+              {paymentError && <div style={{ padding: 10, background: '#fee2e2', color: '#b91c1c', borderRadius: 8, fontSize: 12, marginBottom: 10 }}>{paymentError}</div>}
+              
+              {paymentMethods.length === 0 && !showAddPayment && (
+                <div style={{ padding: '24px 0', textAlign: 'center', color: '#78716c' }}>
+                  <p style={{ margin: '0 0 16px 0', fontSize: 14 }}>No saved payment methods yet.</p>
                 </div>
-              ))}
+              )}
+
+              {!showAddPayment && (
+                <>
+                  {paymentMethods.map(p => (
+                    <div key={p.id} className="branch-option selected" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <div className="branch-meta">
+                        <strong>💳 {p.name}</strong>
+                        <span>{p.detail}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {p.isDefault && <span className="offer-badge" style={{ fontSize: 8 }}>DEFAULT</span>}
+                        <button type="button" onClick={() => handleDeletePayment(p.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, padding: 4 }}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button" className="route-primary" onClick={() => { setShowAddPayment(true); setPaymentError(null); }} style={{ width: '100%', marginTop: 8 }}>
+                    + Add Payment Method
+                  </button>
+                </>
+              )}
+
+              {showAddPayment && (
+                <form onSubmit={handleSavePayment} className="profile-form">
+                  <label>
+                    <span>Payment Type</span>
+                    <select name="type" style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #ddd', background: '#f9f9f9' }}>
+                      <option value="UPI">UPI (Google Pay, PhonePe, Paytm)</option>
+                      <option value="Card">Debit / Credit Card</option>
+                      <option value="Wallet">Digital Wallet</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Provider / Bank Name</span>
+                    <input type="text" name="name" required placeholder="e.g. Google Pay or HDFC Bank" />
+                  </label>
+                  <label>
+                    <span>UPI ID / Last 4 Digits</span>
+                    <input type="text" name="detail" required placeholder="e.g. username@okhdfcbank or •••• 4092" />
+                  </label>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                    <button type="button" onClick={() => setShowAddPayment(false)} className="route-ghost" style={{ flex: 1 }}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="route-primary" style={{ flex: 1 }}>
+                      Save Payment
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>

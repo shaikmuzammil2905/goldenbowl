@@ -72,6 +72,7 @@ model User {
   notifications    Notification[]
   auditLogs        AuditLog[]
   savedAddresses   SavedAddress[]
+  savedPaymentMethods SavedPaymentMethod[]
 
   @@map("users")
 }
@@ -87,6 +88,20 @@ model SavedAddress {
   updatedAt DateTime @updatedAt
 
   @@map("saved_addresses")
+}
+
+model SavedPaymentMethod {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   @default("UPI")
+  name      String
+  detail    String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("saved_payment_methods")
 }
 
 model Branch {

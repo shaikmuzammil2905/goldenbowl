@@ -5,6 +5,11 @@ export const addressController = {
   getAddresses: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = req.params.id as string;
+      const authUser = (req as any).user;
+      if (authUser && authUser.role !== 'ADMIN' && authUser.id !== id) {
+        return res.status(403).json({ success: false, message: 'Unauthorized to access addresses for this account' });
+      }
+
       const addresses = await prisma.savedAddress.findMany({
         where: { userId: id },
         orderBy: { createdAt: 'desc' },
@@ -18,6 +23,11 @@ export const addressController = {
   createAddress: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = req.params.id as string;
+      const authUser = (req as any).user;
+      if (authUser && authUser.role !== 'ADMIN' && authUser.id !== id) {
+        return res.status(403).json({ success: false, message: 'Unauthorized to create addresses for this account' });
+      }
+
       const { type, address, isDefault } = req.body;
 
       if (isDefault) {
@@ -46,6 +56,18 @@ export const addressController = {
     try {
       const id = req.params.id as string;
       const addressId = req.params.addressId as string;
+      const authUser = (req as any).user;
+      if (authUser && authUser.role !== 'ADMIN' && authUser.id !== id) {
+        return res.status(403).json({ success: false, message: 'Unauthorized to update addresses for this account' });
+      }
+
+      const existing = await prisma.savedAddress.findUnique({
+        where: { id: Number(addressId) },
+      });
+      if (!existing || (existing.userId !== id && authUser?.role !== 'ADMIN')) {
+        return res.status(404).json({ success: false, message: 'Address not found or unauthorized' });
+      }
+
       const { type, address, isDefault } = req.body;
 
       if (isDefault) {
@@ -68,7 +90,20 @@ export const addressController = {
 
   deleteAddress: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const id = req.params.id as string;
       const addressId = req.params.addressId as string;
+      const authUser = (req as any).user;
+      if (authUser && authUser.role !== 'ADMIN' && authUser.id !== id) {
+        return res.status(403).json({ success: false, message: 'Unauthorized to delete this address' });
+      }
+
+      const existing = await prisma.savedAddress.findUnique({
+        where: { id: Number(addressId) },
+      });
+      if (!existing || (existing.userId !== id && authUser?.role !== 'ADMIN')) {
+        return res.status(404).json({ success: false, message: 'Address not found or unauthorized' });
+      }
+
       await prisma.savedAddress.delete({
         where: { id: Number(addressId) },
       });
