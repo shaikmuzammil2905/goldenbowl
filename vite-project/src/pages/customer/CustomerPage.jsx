@@ -725,6 +725,24 @@ function OrderDetail({id}) {
   const {orders} = usePrototypeContext();
   const o = orders.find(x => x.id === id) || orders[0];
   const dt = formatOrderDateTime(o?.createdAt);
+  const [cancelling, setCancelling] = React.useState(false);
+
+  const handleCancel = async () => {
+    if (window.confirm('Are you sure you want to cancel this order?')) {
+      setCancelling(true);
+      try {
+        await apiClient(`/orders/${o.id}/status`, {
+          method: 'PATCH',
+          body: { status: 'CANCELLED' }
+        });
+        window.location.reload();
+      } catch (err) {
+        console.error(err);
+        setCancelling(false);
+      }
+    }
+  }
+
   return (
     <>
       <div style={{ marginBottom: 14 }}>
@@ -744,7 +762,28 @@ function OrderDetail({id}) {
           <span key={s}>{s === o?.status || ['CONFIRMED','PREPARING'].includes(s) ? '✓' : '○'} {s.replaceAll('_', ' ')}</span>
         ))}
       </div>
-      <Link className="route-primary" to={`/customer/track/${o?.id}`}>Live Track Order</Link>
+      
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
+        {o?.status !== 'CANCELLED' && o?.status !== 'DELIVERED' && (
+          <Link className="route-primary" to={`/customer/track/${o?.id}`}>Live Track Order</Link>
+        )}
+        
+        {(o?.status === 'ASSIGNED' || o?.status === 'PICKED_UP' || o?.status === 'OUT_FOR_DELIVERY') && (
+          <a href={`tel:${o?.driverMobile || '9999999999'}`} style={{ display: 'block', textAlign: 'center', background: '#e2d8c8', color: '#1c1917', padding: '12px 20px', borderRadius: 14, textDecoration: 'none', fontWeight: 800 }}>
+            📞 Call Delivery Partner
+          </a>
+        )}
+
+        {o?.status !== 'CANCELLED' && o?.status !== 'DELIVERED' && (
+          <button 
+            onClick={handleCancel} 
+            disabled={cancelling}
+            style={{ padding: '12px 20px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 14, fontWeight: 800, cursor: 'pointer' }}
+          >
+            {cancelling ? 'Cancelling...' : 'Cancel Order'}
+          </button>
+        )}
+      </div>
     </>
   )
 }

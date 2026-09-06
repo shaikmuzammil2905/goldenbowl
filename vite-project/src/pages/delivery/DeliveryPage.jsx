@@ -78,6 +78,7 @@ export function DeliveryPage() {
   const assigned = partnerData?.activeOrders || []
   const completed = partnerData?.completedOrders || []
   const allOrders = partnerData?.assignedOrders || []
+  const pendingRequests = partnerData?.pendingRequests || []
   const current = assigned[0] || null
 
   return (
@@ -159,6 +160,7 @@ export function DeliveryPage() {
               <DashboardView
                 current={current}
                 assigned={assigned}
+                pendingRequests={pendingRequests}
                 duty={duty}
                 setDuty={setDuty}
                 onRefresh={loadDashboard}
@@ -211,7 +213,7 @@ export function DeliveryPage() {
 }
 
 /* ── DASHBOARD VIEW ──────────────────────────────────────────── */
-function DashboardView({ current, assigned, duty, setDuty, onRefresh }) {
+function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty, onRefresh }) {
   const [advancing, setAdvancing] = useState(false)
 
   const advanceStatus = async (order) => {
@@ -270,6 +272,54 @@ function DashboardView({ current, assigned, duty, setDuty, onRefresh }) {
           {duty ? 'Pause Duty' : 'Go Online'}
         </button>
       </div>
+
+      {/* Pending Requests Section */}
+      {pendingRequests.length > 0 && (
+        <>
+          <div className="dp-section-title">
+            <h2>Delivery Requests</h2>
+            <span>{pendingRequests.length} Pending</span>
+          </div>
+          {pendingRequests.map(req => (
+            <div key={req.id} className="dp-order-card" style={{ marginBottom: 16 }}>
+              <div className="dp-order-head">
+                <div className="dp-order-id">
+                  <strong>#{req.orderId}</strong>
+                  <span>• {req.order?.branch?.name || 'Golden Food Bowl'}</span>
+                </div>
+                <span className="dp-status-pill pending" style={{ background: '#fef9c3', color: '#854d0e', fontWeight: 800 }}>NEW REQUEST</span>
+              </div>
+              <div style={{ padding: '16px 20px', fontSize: 13, color: '#444' }}>
+                Distance: ~3.2km • Est Payout: ₹45
+              </div>
+              <div className="dp-action-stack" style={{ flexDirection: 'row', gap: 10 }}>
+                <button
+                  type="button"
+                  className="dp-advance-btn"
+                  style={{ flex: 1, background: '#16a34a', color: '#fff' }}
+                  onClick={async () => {
+                    await apiClient(`/delivery/requests/${req.id}/accept`, { method: 'POST' });
+                    onRefresh();
+                  }}
+                >
+                  Accept Delivery
+                </button>
+                <button
+                  type="button"
+                  className="dp-advance-btn"
+                  style={{ flex: 1, background: '#fee2e2', color: '#b91c1c' }}
+                  onClick={async () => {
+                    await apiClient(`/delivery/requests/${req.id}/reject`, { method: 'POST' });
+                    onRefresh();
+                  }}
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
 
       {/* Active Assignment Section */}
       <div className="dp-section-title">

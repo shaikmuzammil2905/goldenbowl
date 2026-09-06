@@ -48,6 +48,18 @@ enum IssuePriority {
   High
 }
 
+enum DeliveryMethod {
+  DIRECT
+  PARTNER
+}
+
+enum DeliveryRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
 enum PaymentStatus {
   PENDING
   SUCCESSFUL
@@ -166,6 +178,7 @@ model Order {
   totalAmount     Decimal          @db.Decimal(10, 2)
   status          OrderStatus      @default(CONFIRMED)
   orderType       String           @default("Delivery")
+  deliveryMethod  DeliveryMethod   @default(DIRECT)
   deliveryAddress String?
   addressType     String?
   etaMinutes      Int              @default(25)
@@ -174,6 +187,7 @@ model Order {
   items         OrderItem[]
   issues        SupportIssue[]
   payments      Payment[]
+  deliveryRequests DeliveryRequest[]
 
   @@map("orders")
 }
@@ -224,6 +238,7 @@ model DeliveryPartner {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   assignedOrders     Order[]
+  deliveryRequests   DeliveryRequest[]
 
   @@map("delivery_partners")
 }
@@ -290,4 +305,17 @@ model OtpCode {
   @@index([identifier])
   @@index([email])
   @@map("otp_codes")
+}
+
+model DeliveryRequest {
+  id        String                @id @default(uuid())
+  orderId   String
+  order     Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  partnerId String
+  partner   DeliveryPartner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  status    DeliveryRequestStatus @default(PENDING)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@map("delivery_requests")
 }

@@ -35,6 +35,7 @@ export class OrderRepository {
     customerName: string;
     totalAmount: number;
     orderType: string;
+    deliveryMethod?: string;
     deliveryAddress?: string;
     addressType?: string;
     items: { productId: number; quantity: number; unitPrice: number; subtotal: number }[];
@@ -47,6 +48,7 @@ export class OrderRepository {
         customerName: data.customerName,
         totalAmount: data.totalAmount,
         orderType: data.orderType,
+        deliveryMethod: (data.deliveryMethod as any) || 'DIRECT',
         deliveryAddress: data.deliveryAddress,
         addressType: data.addressType,
         items: {

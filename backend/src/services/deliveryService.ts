@@ -256,6 +256,10 @@ export class DeliveryService {
               },
               orderBy: { createdAt: 'desc' },
             },
+            deliveryRequests: {
+              where: { status: 'PENDING' },
+              include: { order: { include: { branch: true, customerUser: true } } }
+            }
           },
         });
       }
@@ -312,6 +316,7 @@ export class DeliveryService {
       activeOrders,
       completedOrders,
       assignedOrders,
+      pendingRequests: (partner as any).deliveryRequests || [],
     };
   }
 
@@ -332,6 +337,73 @@ export class DeliveryService {
       where: { id },
       data: updateData,
       include: { user: true },
+    });
+  }
+  static async acceptDeliveryRequest(requestId: string, partnerId: string) {
+    const request = await prisma.deliveryRequest.findUnique({
+      where: { id: requestId }
+    });
+    
+    if (!request || request.status !== 'PENDING') {
+      throw new BadRequestError('Request is not available');
+    }
+
+    // Use transaction to ensure no double assignment
+    return prisma.$transaction(async (tx) => {
+      // Mark this request as accepted
+      await tx.deliveryRequest.update({
+        where: { id: requestId },
+        data: { status: 'ACCEPTED' }
+      });
+      
+      // Assign the order
+      const order = await tx.order.update({
+        where: { id: request.orderId },
+        data: { 
+          driverId: partnerId,
+          status: 'ASSIGNED'
+        },
+        include: { driver: true }
+      });
+      
+      // Mark other pending requests for this order as rejected
+      await tx.deliveryRequest.updateMany({
+        where: { orderId: request.orderId, status: 'PENDING' },
+        data: { status: 'REJECTED' }
+      });
+
+      // Notify admin
+      await tx.notification.create({
+        data: {
+          role: 'ADMIN',
+          title: 'Delivery Assigned',
+          message: `Delivery Partner ${order.driver?.name} accepted Order ${order.id}.`
+        }
+      });
+      
+      return order;
+    });
+  }
+
+  static async rejectDeliveryRequest(requestId: string, partnerId: string) {
+    return prisma.deliveryRequest.update({
+      where: { id: requestId },
+      data: { status: 'REJECTED' }
+    });
+  }
+
+  static async getPendingRequests(partnerId: string) {
+    return prisma.deliveryRequest.findMany({
+      where: {
+        partnerId,
+        status: 'PENDING'
+      },
+      include: {
+        order: {
+          include: { branch: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
     });
   }
 }

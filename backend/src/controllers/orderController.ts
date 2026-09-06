@@ -33,6 +33,7 @@ export class OrderController {
         customerName: req.body.customerName || req.user?.name || 'Guest',
         branchId: req.body.branchId,
         orderType: req.body.orderType,
+        deliveryMethod: req.body.deliveryMethod,
         deliveryAddress: req.body.deliveryAddress,
         addressType: req.body.addressType,
         items: req.body.items,

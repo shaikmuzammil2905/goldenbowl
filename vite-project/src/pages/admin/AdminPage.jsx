@@ -64,6 +64,7 @@ import {
 import { NotificationPanel } from '../../components/notifications/NotificationPanel'
 import { AdminReports } from './AdminReports'
 import { Branches } from './Branches'
+import { Settings } from './Settings'
 import { orderApi } from '../../services/api/orderApi'
 import './admin-content.css'
 
@@ -113,6 +114,7 @@ export function AdminPage() {
       {path === 'delivery' && <Delivery />}
       {path === 'support' && <Support liveOrders={liveOrders} />}
       {path === 'reports' && <AdminReports />}
+      {path === 'settings' && <Settings />}
       {path === 'notifications' && <AdminNotifications liveOrders={liveOrders} />}
     </section>
   )
@@ -168,6 +170,8 @@ function Orders({ orders = [], loading = false, fetchOrders }) {
   const [datePreset, setDatePreset] = useState('ALL')
   const [customDate, setCustomDate] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const [assigningOrder, setAssigningOrder] = useState(null)
+  const { deliveryPartners = [] } = usePrototypeContext()
 
   const formatDateTime = (dateStr) => {
     if (!dateStr) return { date: '30 Aug 2026', time: '07:30 PM', full: '30 Aug 2026, 07:30 PM' }
@@ -305,6 +309,7 @@ function Orders({ orders = [], loading = false, fetchOrders }) {
                 <th>Branch</th>
                 <th>Customer</th>
                 <th>Amount</th>
+                <th>Method</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -328,6 +333,7 @@ function Orders({ orders = [], loading = false, fetchOrders }) {
                     <td>{o.branch}</td>
                     <td>{o.customer}</td>
                     <td><strong>₹{o.total}</strong></td>
+                    <td>{o.deliveryMethod === 'PARTNER' ? <span style={{color:'#0284c7', fontWeight:700}}><Truck size={12}/> Partner</span> : <span style={{color:'#b4811d', fontWeight:700}}>Direct</span>}</td>
                     <td>
                       <span className={`table-status ${o.status.toLowerCase()}`} style={o.status === 'CANCELLED' ? { background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', fontWeight: 800 } : {}}>
                         {o.status === 'CANCELLED' ? '❌ CANCELLED' : o.status.replaceAll('_', ' ')}
@@ -341,16 +347,20 @@ function Orders({ orders = [], loading = false, fetchOrders }) {
                         {o.status === 'CANCELLED' ? (
                           <span style={{ fontSize: 10, color: '#b91c1c', fontWeight: 700 }}>Cancelled</span>
                         ) : o.status !== 'DELIVERED' ? (
-                          <button className="admin-action-btn" onClick={async () => {
-                            if (o.status === 'READY_FOR_PICKUP') {
-                              await orderApi.assignDeliveryPartner(o.id, 'driver-id-placeholder');
-                            } else {
-                              await orderApi.updateOrderStatus(o.id, nextStatus(o.status));
-                            }
-                            if (fetchOrders) fetchOrders();
-                          }}>
-                            {o.status === 'READY_FOR_PICKUP' ? 'Assign Delivery →' : 'Advance →'}
-                          </button>
+                          <>
+                            {o.status === 'READY_FOR_PICKUP' && o.deliveryMethod === 'PARTNER' ? (
+                              <button className="admin-action-btn" onClick={() => setAssigningOrder(o)}>
+                                Assign Partner
+                              </button>
+                            ) : (
+                              <button className="admin-action-btn" onClick={async () => {
+                                await orderApi.updateOrderStatus(o.id, nextStatus(o.status));
+                                if (fetchOrders) fetchOrders();
+                              }}>
+                                Advance →
+                              </button>
+                            )}
+                          </>
                         ) : (
                           <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 800 }}>✓ Done</span>
                         )}
@@ -421,6 +431,39 @@ function Orders({ orders = [], loading = false, fetchOrders }) {
 
               <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
                 <button className="secondary-btn" onClick={() => setSelectedOrder(null)} style={{ padding: '8px 16px', fontWeight: 700 }}>Close Details</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {assigningOrder && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'grid', placeItems: 'center', padding: 16 }} onClick={() => setAssigningOrder(null)}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 400, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+              <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 900 }}>Assign Delivery Partner</h3>
+              <p style={{ margin: '0 0 16px', fontSize: 13, color: '#78716c' }}>Order #{assigningOrder.id} • {assigningOrder.customer}</p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto' }}>
+                {deliveryPartners.filter(p => p.verificationStatus === 'VERIFIED').map(p => (
+                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, border: '1px solid #e2d8c8', borderRadius: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 14 }}>{p.name}</div>
+                      <div style={{ fontSize: 11, color: '#78716c' }}>{p.vehicle} • ★ {p.rating}</div>
+                    </div>
+                    <button className="admin-action-btn" onClick={async () => {
+                      await orderApi.assignDeliveryPartner(assigningOrder.id, p.id);
+                      if (fetchOrders) fetchOrders();
+                      setAssigningOrder(null);
+                    }}>
+                      Assign
+                    </button>
+                  </div>
+                ))}
+                {deliveryPartners.filter(p => p.verificationStatus === 'VERIFIED').length === 0 && (
+                  <div style={{ padding: 20, textAlign: 'center', color: '#78716c', fontSize: 13 }}>No verified partners available.</div>
+                )}
+              </div>
+              
+              <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="secondary-btn" onClick={() => setAssigningOrder(null)} style={{ padding: '8px 16px', fontWeight: 700 }}>Cancel</button>
               </div>
             </div>
           </div>

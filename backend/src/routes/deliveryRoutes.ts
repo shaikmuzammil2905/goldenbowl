@@ -15,4 +15,8 @@ router.get('/partners/:id', authenticateToken, DeliveryController.getPartnerProf
 router.put('/partners/:id', authenticateToken, logAuditAction('UPDATE_DELIVERY_PARTNER', 'DeliveryPartner'), DeliveryController.updatePartnerProfile);
 router.patch('/partners/:id/verification', authenticateToken, authorizeRoles('ADMIN'), logAuditAction('VERIFY_DELIVERY_PARTNER', 'DeliveryPartner'), DeliveryController.updateVerificationStatus);
 
+router.get('/requests/pending', authenticateToken, authorizeRoles('DELIVERY'), DeliveryController.getPendingRequests);
+router.post('/requests/:id/accept', authenticateToken, authorizeRoles('DELIVERY'), logAuditAction('ACCEPT_DELIVERY', 'DeliveryRequest'), DeliveryController.acceptRequest);
+router.post('/requests/:id/reject', authenticateToken, authorizeRoles('DELIVERY'), logAuditAction('REJECT_DELIVERY', 'DeliveryRequest'), DeliveryController.rejectRequest);
+
 export default router;

@@ -20,6 +20,7 @@ export class OrderService {
     branchId?: number;
     customerName: string;
     orderType?: string;
+    deliveryMethod?: string;
     deliveryAddress?: string;
     addressType?: string;
     items: { productId: number; quantity: number }[];
@@ -53,10 +54,40 @@ export class OrderService {
       customerName: payload.customerName,
       totalAmount,
       orderType: payload.orderType || 'Delivery',
+      deliveryMethod: payload.deliveryMethod || 'DIRECT',
       deliveryAddress: payload.deliveryAddress,
       addressType: payload.addressType,
       items: orderItems,
     });
+
+    if (payload.deliveryMethod === 'PARTNER') {
+      // Find eligible delivery partners (e.g. VERIFIED and active)
+      const partners = await prisma.deliveryPartner.findMany({
+        where: { verificationStatus: 'VERIFIED' },
+        take: 5
+      });
+      
+      if (partners.length > 0) {
+        // Create delivery requests
+        await prisma.deliveryRequest.createMany({
+          data: partners.map(p => ({
+            orderId: order.id,
+            partnerId: p.id,
+            status: 'PENDING'
+          }))
+        });
+
+        // Notify partners
+        await prisma.notification.createMany({
+          data: partners.map(p => ({
+            userId: p.userId,
+            role: 'DELIVERY',
+            title: 'New Delivery Request',
+            message: `Order ${orderId} is available for pickup. Distance: 3.2km, Payout: ₹45.`
+          }))
+        });
+      }
+    }
 
     // Notify Admin and Support
     await prisma.notification.createMany({
@@ -86,6 +117,13 @@ export class OrderService {
       } catch (err) {
         console.error('Failed to update driver earnings/trips:', err);
       }
+    }
+
+    if (status === 'CANCELLED') {
+      await prisma.deliveryRequest.updateMany({
+        where: { orderId: id, status: 'PENDING' },
+        data: { status: 'CANCELLED' }
+      });
     }
 
     // Notify Customer

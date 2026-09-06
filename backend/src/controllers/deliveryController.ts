@@ -84,4 +84,42 @@ export class DeliveryController {
       next(error);
     }
   }
+
+  static async getPendingRequests(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const partnerId = req.user?.id;
+      if (!partnerId) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+      const partner = await DeliveryService.getPartnerById(partnerId);
+      const requests = await DeliveryService.getPendingRequests(partner?.id || '');
+      res.status(200).json({ success: true, data: requests });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async acceptRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const requestId = req.params.id as string;
+      const partnerId = req.user?.id;
+      const partner = await DeliveryService.getPartnerById(partnerId || '');
+      const order = await DeliveryService.acceptDeliveryRequest(requestId, partner?.id || '');
+      res.status(200).json({ success: true, message: 'Request accepted', data: order });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async rejectRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const requestId = req.params.id as string;
+      const partnerId = req.user?.id;
+      const partner = await DeliveryService.getPartnerById(partnerId || '');
+      await DeliveryService.rejectDeliveryRequest(requestId, partner?.id || '');
+      res.status(200).json({ success: true, message: 'Request rejected' });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
