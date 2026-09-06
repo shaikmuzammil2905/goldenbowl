@@ -1517,7 +1517,7 @@ function Delivery({ liveOrders = [], fetchOrders }) {
               </tr>
             </thead>
             <tbody>
-              {liveOrders.filter(o => o.deliveryMethod === 'PARTNER' || (o.orderType && o.orderType.toLowerCase() === 'delivery')).map(o => {
+              {liveOrders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED').map(o => {
                 const dt = new Date(o.createdAt).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit' })
                 return (
                   <tr key={o.id}>
@@ -1564,7 +1564,7 @@ function Delivery({ liveOrders = [], fetchOrders }) {
                   </tr>
                 )
               })}
-              {liveOrders.filter(o => o.deliveryMethod === 'PARTNER' || (o.orderType && o.orderType.toLowerCase() === 'delivery')).length === 0 && (
+              {liveOrders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED').length === 0 && (
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: 30, color: '#78716c', fontSize: 12 }}>
                     No delivery orders available.
