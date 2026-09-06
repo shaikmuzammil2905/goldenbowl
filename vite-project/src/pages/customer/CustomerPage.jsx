@@ -406,7 +406,7 @@ function Payment() {
         customerName: customerName,
         deliveryAddress: cart.address,
         addressType: cart.addressType || 'Home',
-        deliveryMethod: deliverySettings?.defaultMethod || 'DIRECT'
+        deliveryMethod: deliverySettings?.defaultMethod || 'PARTNER'
       });
       const order = orderRes.data || orderRes;
       localStorage.removeItem(CART_KEY);
