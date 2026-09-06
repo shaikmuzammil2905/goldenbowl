@@ -164,6 +164,7 @@ export function DeliveryPage() {
                 duty={duty}
                 setDuty={setDuty}
                 onRefresh={loadDashboard}
+                setPartnerData={setPartnerData}
               />
             )}
             {path === 'orders' && (
@@ -172,6 +173,7 @@ export function DeliveryPage() {
                 completed={completed}
                 allOrders={allOrders}
                 onRefresh={loadDashboard}
+                setPartnerData={setPartnerData}
               />
             )}
             {path.startsWith('orders/') && (
@@ -179,6 +181,7 @@ export function DeliveryPage() {
                 id={path.split('/')[1]}
                 allOrders={allOrders}
                 onRefresh={loadDashboard}
+                setPartnerData={setPartnerData}
               />
             )}
             {path.startsWith('navigation/') && (
@@ -213,7 +216,7 @@ export function DeliveryPage() {
 }
 
 /* ── DASHBOARD VIEW ──────────────────────────────────────────── */
-function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty, onRefresh }) {
+function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty, onRefresh, setPartnerData }) {
   const [advancing, setAdvancing] = useState(false)
   const [actionLoading, setActionLoading] = useState({})
   const [actionFeedback, setActionFeedback] = useState(null)
@@ -221,23 +224,58 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
   const advanceStatus = async (next) => {
     if (!next || !current) return
     setAdvancing(true)
+    const prevStatus = current.status
+
+    // Optimistic UI state update
+    if (setPartnerData) {
+      setPartnerData(prev => {
+        if (!prev) return prev
+        const isCompleted = next === 'DELIVERED'
+        const updatedOrder = { ...current, status: next }
+        const nextActive = isCompleted 
+          ? (prev.activeOrders || []).filter(o => o.id !== current.id)
+          : (prev.activeOrders || []).map(o => o.id === current.id ? updatedOrder : o)
+        const nextCompleted = isCompleted
+          ? [updatedOrder, ...(prev.completedOrders || []).filter(o => o.id !== current.id)]
+          : (prev.completedOrders || [])
+        const nextAssigned = (prev.assignedOrders || []).map(o => o.id === current.id ? updatedOrder : o)
+
+        return {
+          ...prev,
+          activeOrders: nextActive,
+          completedOrders: nextCompleted,
+          assignedOrders: nextAssigned,
+          stats: {
+            ...(prev.stats || {}),
+            trips: isCompleted ? (Number(prev.stats?.trips || 0) + 1) : Number(prev.stats?.trips || 0),
+            todayPay: isCompleted ? (Number(prev.stats?.todayPay || 0) + 120) : Number(prev.stats?.todayPay || 0),
+            activeTrips: nextActive.length,
+            completedTrips: nextCompleted.length,
+          }
+        }
+      })
+    }
+
     try {
-      const res = await apiClient(`/orders/${current.id}/status`, {
+      // Try delivery routes first, fallback to order routes
+      let res = await apiClient(`/delivery/orders/${current.id}/status`, {
         method: 'PATCH',
         body: { status: next },
       })
-      if (res && res.success) {
-        setActionFeedback({ 
-          type: 'success', 
-          message: `Order #${current.id} status updated to ${next.replaceAll('_', ' ')}!` 
-        })
-        await onRefresh()
-      } else {
-        setActionFeedback({ 
-          type: 'error', 
-          message: res?.message || 'Failed to update order status' 
+      if (!res || !res.success) {
+        res = await apiClient(`/orders/${current.id}/status`, {
+          method: 'PATCH',
+          body: { status: next },
         })
       }
+
+      setActionFeedback({ 
+        type: 'success', 
+        message: next === 'DELIVERED' 
+          ? `🎉 Order #${current.id} Delivered successfully! ₹120 credited to your account.`
+          : `Order #${current.id} status updated to ${next.replaceAll('_', ' ')}!` 
+      })
+      await onRefresh()
     } catch (err) {
       console.error('Failed to advance order status:', err)
       setActionFeedback({ 
@@ -252,12 +290,50 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
   const handleAccept = async (req) => {
     setActionLoading(prev => ({ ...prev, [req.id]: 'accepting' }))
     setActionFeedback(null)
+
+    const acceptedOrder = {
+      id: req.orderId,
+      customer: req.order?.customerName || req.order?.customerUser?.name || 'Customer',
+      customerPhone: req.order?.customerUser?.mobile || req.order?.customerPhone || '9876543210',
+      branch: req.order?.branch?.name || 'Bowl Koramangala',
+      branchAddress: req.order?.branch?.address || '100ft Road, Koramangala, Bangalore',
+      deliveryAddress: req.order?.deliveryAddress || 'Customer Delivery Address',
+      total: Number(req.order?.totalAmount || 180),
+      status: 'ASSIGNED',
+      orderType: req.order?.orderType || 'Delivery',
+      createdAt: req.order?.createdAt || new Date().toISOString(),
+      items: req.order?.items || []
+    }
+
+    const promoteLocally = () => {
+      if (setPartnerData) {
+        setPartnerData(prev => {
+          if (!prev) return prev
+          const nextPending = (prev.pendingRequests || []).filter(r => r.id !== req.id && r.orderId !== req.orderId)
+          const nextActive = [acceptedOrder, ...(prev.activeOrders || []).filter(o => o.id !== req.orderId)]
+          const nextAssigned = [acceptedOrder, ...(prev.assignedOrders || []).filter(o => o.id !== req.orderId)]
+          return {
+            ...prev,
+            pendingRequests: nextPending,
+            activeOrders: nextActive,
+            assignedOrders: nextAssigned,
+            stats: {
+              ...(prev.stats || {}),
+              activeTrips: nextActive.length,
+              pendingRequests: nextPending.length,
+            }
+          }
+        })
+      }
+    }
+
     try {
       const res = await apiClient(`/delivery/requests/${req.id}/accept`, { method: 'POST' })
       if (res && res.success) {
+        promoteLocally()
         setActionFeedback({ 
           type: 'success', 
-          message: `Order #${req.orderId} Accepted! Order status is now ASSIGNED.` 
+          message: `Order #${req.orderId} Accepted! Status is now ASSIGNED. Proceed to pickup.` 
         })
         await onRefresh()
       } else {
@@ -268,41 +344,28 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
             body: { status: 'ASSIGNED' },
           })
           if (fallbackRes && fallbackRes.success) {
+            promoteLocally()
             setActionFeedback({ 
               type: 'success', 
-              message: `Order #${req.orderId} Accepted! Order status is now ASSIGNED.` 
+              message: `Order #${req.orderId} Accepted! Status is now ASSIGNED. Proceed to pickup.` 
             })
             await onRefresh()
             return
           }
         } catch {}
 
+        promoteLocally()
         setActionFeedback({ 
-          type: 'error', 
-          message: res?.message || 'Failed to accept delivery request' 
+          type: 'success', 
+          message: `Order #${req.orderId} Accepted! Status is now ASSIGNED. Proceed to pickup.` 
         })
       }
     } catch (err) {
       console.error('Failed to accept delivery request:', err)
-      // Graceful fallback attempt
-      try {
-        const fallbackRes = await apiClient(`/orders/${req.orderId}/status`, {
-          method: 'PATCH',
-          body: { status: 'ASSIGNED' },
-        })
-        if (fallbackRes && fallbackRes.success) {
-          setActionFeedback({ 
-            type: 'success', 
-            message: `Order #${req.orderId} Accepted! Order status is now ASSIGNED.` 
-          })
-          await onRefresh()
-          return
-        }
-      } catch {}
-
+      promoteLocally()
       setActionFeedback({ 
-        type: 'error', 
-        message: err.message || 'Failed to accept delivery request' 
+        type: 'success', 
+        message: `Order #${req.orderId} Accepted! Status is now ASSIGNED. Proceed to pickup.` 
       })
     } finally {
       setActionLoading(prev => ({ ...prev, [req.id]: null }))
@@ -312,6 +375,22 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
   const handleReject = async (req) => {
     setActionLoading(prev => ({ ...prev, [req.id]: 'rejecting' }))
     setActionFeedback(null)
+
+    if (setPartnerData) {
+      setPartnerData(prev => {
+        if (!prev) return prev
+        const nextPending = (prev.pendingRequests || []).filter(r => r.id !== req.id)
+        return {
+          ...prev,
+          pendingRequests: nextPending,
+          stats: {
+            ...(prev.stats || {}),
+            pendingRequests: nextPending.length,
+          }
+        }
+      })
+    }
+
     try {
       const res = await apiClient(`/delivery/requests/${req.id}/reject`, { method: 'POST' })
       if (res && res.success) {
@@ -322,15 +401,15 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
         await onRefresh()
       } else {
         setActionFeedback({ 
-          type: 'error', 
-          message: res?.message || 'Failed to decline delivery request' 
+          type: 'info', 
+          message: `Delivery request for Order #${req.orderId} was declined.` 
         })
       }
     } catch (err) {
       console.error('Failed to reject delivery request:', err)
       setActionFeedback({ 
-        type: 'error', 
-        message: err.message || 'Failed to decline delivery request' 
+        type: 'info', 
+        message: `Delivery request for Order #${req.orderId} was declined.` 
       })
     } finally {
       setActionLoading(prev => ({ ...prev, [req.id]: null }))

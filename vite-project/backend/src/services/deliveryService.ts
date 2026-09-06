@@ -243,12 +243,20 @@ export class DeliveryService {
       throw new NotFoundError('Delivery partner account not found');
     }
 
-    // Comprehensive query for assigned orders matching either partner.id or partner.userId
+    // Comprehensive query for assigned orders matching partner.id, partner.userId, or accepted deliveryRequests
     const rawAssignedOrders = await prisma.order.findMany({
       where: {
         OR: [
           { driverId: partner.id },
-          ...(partner.userId ? [{ driverId: partner.userId }] : [])
+          ...(partner.userId ? [{ driverId: partner.userId }] : []),
+          {
+            deliveryRequests: {
+              some: {
+                partnerId: partner.id,
+                status: 'ACCEPTED'
+              }
+            }
+          }
         ]
       },
       include: {
