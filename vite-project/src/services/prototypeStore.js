@@ -205,6 +205,32 @@ export async function syncWithBackend() {
       console.warn('Orders sync error:', orderErr.message)
     }
 
+    // Delivery Partners Sync
+    try {
+      const partnersRes = await apiClient('/delivery/partners', { fallback: null })
+      if (partnersRes && Array.isArray(partnersRes.data)) {
+        // Keep the local mock structure, but update with real DB partners
+        const livePartners = partnersRes.data.map(p => ({
+          id: p.id,
+          userId: p.userId,
+          name: p.name,
+          mobile: p.mobile,
+          vehicle: p.vehicle || 'Bike',
+          rating: p.rating || 5.0,
+          trips: p.trips || 0,
+          fee: Number(p.feeAmount || 700),
+          verificationStatus: p.verificationStatus,
+          feeStatus: p.feeStatus
+        }))
+        if (livePartners.length > 0) {
+          state = { ...state, deliveryPartners: livePartners }
+          updated = true
+        }
+      }
+    } catch (partnerErr) {
+      console.warn('Partners sync error:', partnerErr.message)
+    }
+
     if (updated) {
       persist()
       listeners.forEach((listener) => listener(state))
