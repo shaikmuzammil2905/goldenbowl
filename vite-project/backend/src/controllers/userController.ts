@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { UserRepository } from '../repositories/userRepository.js';
-import { Role } from '@prisma/client';
+
 
 export class UserController {
   static async getUsers(req: Request, res: Response, next: NextFunction) {
     try {
       const { role } = req.query;
-      const users = await UserRepository.listUsers(role as Role);
+      const users = await UserRepository.listUsers(role as string);
       res.status(200).json({ success: true, data: users });
     } catch (error) {
       next(error);

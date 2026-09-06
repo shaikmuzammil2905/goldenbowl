@@ -1,11 +1,10 @@
 import { prisma } from '../config/prisma.js';
-import { OrderStatus } from '@prisma/client';
 
 export class OrderRepository {
-  static async findAll(params: { status?: OrderStatus; customerId?: string }) {
+  static async findAll(params: { status?: string; customerId?: string }) {
     return prisma.order.findMany({
       where: {
-        status: params.status,
+        status: (params.status as any),
         customerId: params.customerId,
       },
       include: {
@@ -36,6 +35,9 @@ export class OrderRepository {
     customerName: string;
     totalAmount: number;
     orderType: string;
+    deliveryMethod?: string;
+    deliveryAddress?: string;
+    addressType?: string;
     items: { productId: number; quantity: number; unitPrice: number; subtotal: number }[];
   }) {
     return prisma.order.create({
@@ -46,6 +48,9 @@ export class OrderRepository {
         customerName: data.customerName,
         totalAmount: data.totalAmount,
         orderType: data.orderType,
+        deliveryMethod: (data.deliveryMethod as any) || 'DIRECT',
+        deliveryAddress: data.deliveryAddress,
+        addressType: data.addressType,
         items: {
           create: data.items,
         },
@@ -57,10 +62,10 @@ export class OrderRepository {
     });
   }
 
-  static async updateStatus(id: string, status: OrderStatus) {
+  static async updateStatus(id: string, status: string) {
     return prisma.order.update({
       where: { id },
-      data: { status },
+      data: { status: (status as any) },
       include: { items: true, branch: true, driver: true },
     });
   }
