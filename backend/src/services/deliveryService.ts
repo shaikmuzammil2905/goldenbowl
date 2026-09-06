@@ -392,29 +392,6 @@ export class DeliveryService {
     });
   }
 
-  /**
-   * Helper to safely determine which ID (delivery_partners.id or users.id)
-   * satisfies the orders_driverId_fkey constraint.
-   */
-  private static async getDriverForeignKeyTarget(): Promise<'users' | 'delivery_partners'> {
-    try {
-      const res: any = await prisma.$queryRawUnsafe(`
-        SELECT ccu.table_name AS foreign_table_name
-        FROM information_schema.table_constraints AS tc 
-        JOIN information_schema.constraint_column_usage AS ccu
-          ON ccu.constraint_name = tc.constraint_name
-        WHERE tc.constraint_name = 'orders_driverId_fkey'
-        LIMIT 1;
-      `);
-      if (Array.isArray(res) && res.length > 0 && res[0]?.foreign_table_name) {
-        const tbl = String(res[0].foreign_table_name).toLowerCase();
-        if (tbl.includes('user')) return 'users';
-      }
-    } catch {
-      // Fallback to delivery_partners if information_schema query is unavailable
-    }
-    return 'delivery_partners';
-  }
 
   static async acceptDeliveryRequest(requestId: string, requestingPartnerId: string, authenticatedUserId?: string) {
     const request = await prisma.deliveryRequest.findUnique({
@@ -458,105 +435,107 @@ export class DeliveryService {
       if (foundPartner) {
         partnerToAssign = foundPartner;
       }
+    } else if (authenticatedUserId) {
+      const foundPartner = await this.getPartnerByUserId(authenticatedUserId);
+      if (foundPartner) {
+        partnerToAssign = foundPartner;
+      }
     }
 
     if (!partnerToAssign) {
       throw new BadRequestError('Your delivery partner account is not properly configured.');
     }
 
-    // Atomic transaction to ensure mutual exclusion
-    return prisma.$transaction(async (tx) => {
-      // Check order is still unassigned
-      const freshOrder = await tx.order.findUnique({
-        where: { id: request.orderId },
-        select: { driverId: true, status: true }
-      });
+    // Helper to run atomic assignment transaction with a specified driver ID
+    const executeAccept = async (targetDriverId: string) => {
+      return prisma.$transaction(async (tx) => {
+        const freshOrder = await tx.order.findUnique({
+          where: { id: request.orderId },
+          select: { driverId: true, status: true }
+        });
 
-      if (!freshOrder) {
-        throw new NotFoundError('Order not found.');
-      }
-      if (freshOrder.driverId) {
-        throw new BadRequestError('Sorry, this delivery has already been accepted by another partner.');
-      }
+        if (!freshOrder) {
+          throw new NotFoundError('Order not found.');
+        }
+        if (freshOrder.driverId) {
+          throw new BadRequestError('Sorry, this delivery has already been accepted by another partner.');
+        }
 
-      // Mark this request as accepted
-      await tx.deliveryRequest.update({
-        where: { id: requestId },
-        data: { status: 'ACCEPTED' }
-      });
+        // Mark this request as accepted
+        await tx.deliveryRequest.update({
+          where: { id: requestId },
+          data: { status: 'ACCEPTED' }
+        });
 
-      // Try assigning using the primary foreign key target, with automated fallback
-      const fkTarget = await DeliveryService.getDriverForeignKeyTarget();
-      const primaryId = fkTarget === 'users' ? (partnerToAssign.userId || partnerToAssign.id) : partnerToAssign.id;
-      const fallbackId = primaryId === partnerToAssign.id ? (partnerToAssign.userId || partnerToAssign.id) : partnerToAssign.id;
-
-      let order;
-      try {
-        order = await tx.order.update({
+        // Assign driver to order
+        const order = await tx.order.update({
           where: { id: request.orderId },
           data: { 
-            driverId: primaryId,
+            driverId: targetDriverId,
             status: 'ASSIGNED'
           },
           include: { driver: true, branch: true, customerUser: true, items: { include: { product: true } } }
         });
-      } catch (err: any) {
-        if (err.message?.includes('orders_driverId_fkey')) {
-          logger.warn(`[AcceptDelivery] orders_driverId_fkey retry with fallback ID: ${fallbackId}`);
-          order = await tx.order.update({
-            where: { id: request.orderId },
-            data: { 
-              driverId: fallbackId,
-              status: 'ASSIGNED'
-            },
-            include: { driver: true, branch: true, customerUser: true, items: { include: { product: true } } }
-          });
-        } else {
-          throw err;
-        }
-      }
-      
-      // Mark any other pending requests for this order as rejected
-      await tx.deliveryRequest.updateMany({
-        where: { 
-          orderId: request.orderId, 
-          status: 'PENDING',
-          id: { not: requestId }
-        },
-        data: { status: 'REJECTED' }
+
+        // Mark any other pending requests for this order as rejected
+        await tx.deliveryRequest.updateMany({
+          where: { 
+            orderId: request.orderId, 
+            status: 'PENDING',
+            id: { not: requestId }
+          },
+          data: { status: 'REJECTED' }
+        });
+
+        return order;
       });
+    };
 
-      // Customer notification
-      if (order.customerId) {
-        try {
-          await tx.notification.create({
-            data: {
-              userId: order.customerId,
-              role: 'CUSTOMER',
-              title: 'Delivery Partner Assigned',
-              message: `${partnerToAssign.name} has accepted your order #${order.id} and is heading to the restaurant.`
-            }
-          });
-        } catch {
-          // Non-blocking notification
-        }
+    // Attempt assignment:
+    // 1. Primary: partnerToAssign.id (matches delivery_partners.id in schema)
+    // 2. Fallback: partnerToAssign.userId (if database has legacy user foreign key)
+    let order;
+    try {
+      order = await executeAccept(partnerToAssign.id);
+    } catch (err: any) {
+      if (err.message?.includes('orders_driverId_fkey') && partnerToAssign.userId && partnerToAssign.userId !== partnerToAssign.id) {
+        logger.warn(`[AcceptDelivery] orders_driverId_fkey retry with partner.userId (${partnerToAssign.userId})`);
+        order = await executeAccept(partnerToAssign.userId);
+      } else {
+        throw err;
       }
+    }
 
-      // Admin notification
+    // Customer notification (non-blocking)
+    if (order.customerId) {
       try {
-        await tx.notification.create({
+        await prisma.notification.create({
           data: {
-            role: 'ADMIN',
-            title: 'Delivery Request Accepted',
-            message: `Delivery Partner ${partnerToAssign.name} accepted Order #${order.id}. Order is now ASSIGNED.`
+            userId: order.customerId,
+            role: 'CUSTOMER',
+            title: 'Delivery Partner Assigned',
+            message: `${partnerToAssign.name} has accepted your order #${order.id} and is heading to the restaurant.`
           }
         });
       } catch {
         // Non-blocking notification
       }
-      
-      return order;
-    });
+    }
+
+    // Admin notification (non-blocking)
+    try {
+      await prisma.notification.create({
+        data: {
+          role: 'ADMIN',
+          title: 'Delivery Request Accepted',
+          message: `Delivery Partner ${partnerToAssign.name} accepted Order #${order.id}. Order is now ASSIGNED.`
+        }
+      });
+    } catch {
+      // Non-blocking notification
+    }
+    
+    return order;
   }
 
   static async rejectDeliveryRequest(requestId: string, partnerId: string) {
