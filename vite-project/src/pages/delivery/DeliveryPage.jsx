@@ -216,19 +216,11 @@ export function DeliveryPage() {
 function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty, onRefresh }) {
   const [advancing, setAdvancing] = useState(false)
 
-  const advanceStatus = async (order) => {
-    const statusMap = {
-      CONFIRMED: 'ASSIGNED',
-      ASSIGNED: 'PICKED_UP',
-      PICKED_UP: 'OUT_FOR_DELIVERY',
-      OUT_FOR_DELIVERY: 'DELIVERED',
-    }
-    const next = statusMap[order.status]
+  const advanceStatus = async (next) => {
     if (!next) return
-
     setAdvancing(true)
     try {
-      const res = await apiClient(`/orders/${order.id}/status`, {
+      const res = await apiClient(`/orders/${current.id}/status`, {
         method: 'PATCH',
         body: { status: next },
       })
@@ -242,15 +234,13 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
     }
   }
 
-  const getButtonText = (status) => {
-    switch (status) {
-      case 'ASSIGNED': return 'Accept & Head to Restaurant →'
-      case 'PICKED_UP': return 'Order Picked Up • Start Delivery →'
-      case 'OUT_FOR_DELIVERY': return 'Arrived at Customer • Mark Delivered ✓'
-      case 'DELIVERED': return '✓ Delivery Completed!'
-      default: return 'Advance Delivery Status →'
-    }
-  }
+  // Auto refresh
+  useEffect(() => {
+    const interval = setInterval(() => {
+      onRefresh()
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [onRefresh])
 
   return (
     <>
@@ -412,14 +402,19 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
           {/* Action Buttons */}
           <div className="dp-action-stack">
             {current.status !== 'DELIVERED' ? (
-              <button
-                type="button"
+              <select
                 className="dp-advance-btn"
                 disabled={advancing}
-                onClick={() => advanceStatus(current)}
+                value=""
+                onChange={(e) => advanceStatus(e.target.value)}
+                style={{ appearance: 'none', textAlign: 'center', background: '#1c1917', color: '#f5c518', border: 'none', fontWeight: 800, padding: '14px', borderRadius: '12px', fontSize: '13px' }}
               >
-                {advancing ? 'Updating Status...' : getButtonText(current.status)}
-              </button>
+                <option value="" disabled>{advancing ? 'Updating Status...' : 'Advance Status (Click for Options)'}</option>
+                <option value="ASSIGNED">Assigned & Head to Restaurant</option>
+                <option value="PICKED_UP">Picked Up</option>
+                <option value="OUT_FOR_DELIVERY">Out for Delivery</option>
+                <option value="DELIVERED">Delivered</option>
+              </select>
             ) : (
               <div style={{ textAlign: 'center', padding: '10px', color: '#16a34a', fontWeight: 800 }}>
                 ✓ Order Completed! Great job.
