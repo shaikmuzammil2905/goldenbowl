@@ -38,7 +38,43 @@ export function DeliveryPage() {
     try {
       const res = await apiClient('/delivery/me')
       if (res && res.success && res.data) {
-        setPartnerData(res.data)
+        setPartnerData(prev => {
+          if (!prev) return res.data
+
+          const serverActive = res.data.activeOrders || []
+          const serverAssigned = res.data.assignedOrders || []
+          const serverCompleted = res.data.completedOrders || []
+          const serverPending = res.data.pendingRequests || []
+
+          const activeIds = new Set(serverActive.map(o => o.id))
+          const completedIds = new Set(serverCompleted.map(o => o.id))
+
+          // Preserve any locally active accepted orders
+          const localAcceptedActive = (prev.activeOrders || []).filter(
+            o => o && o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && !activeIds.has(o.id) && !completedIds.has(o.id)
+          )
+
+          const allActiveIds = new Set([...serverActive.map(o => o.id), ...localAcceptedActive.map(o => o.id)])
+          const cleanPending = serverPending.filter(
+            r => !allActiveIds.has(r.orderId) && !allActiveIds.has(r.id)
+          )
+
+          const mergedActive = [...serverActive, ...localAcceptedActive]
+          const assignedIds = new Set(serverAssigned.map(o => o.id))
+          const mergedAssigned = [...serverAssigned, ...localAcceptedActive.filter(o => !assignedIds.has(o.id))]
+
+          return {
+            ...res.data,
+            activeOrders: mergedActive,
+            assignedOrders: mergedAssigned,
+            pendingRequests: cleanPending,
+            stats: {
+              ...(res.data.stats || {}),
+              activeTrips: mergedActive.length,
+              pendingRequests: cleanPending.length
+            }
+          }
+        })
       }
     } catch (err) {
       console.error('Failed to load delivery partner dashboard:', err)

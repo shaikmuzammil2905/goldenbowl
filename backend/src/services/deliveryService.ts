@@ -294,11 +294,16 @@ export class DeliveryService {
       (o: any) => o.status === 'DELIVERED'
     );
 
-    // Fetch pending requests for this partner
+    // Fetch pending requests for this partner (strictly unassigned orders)
     const pendingRequests = await prisma.deliveryRequest.findMany({
       where: {
         partnerId: partner.id,
-        status: 'PENDING'
+        status: 'PENDING',
+        order: {
+          status: {
+            notIn: ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']
+          }
+        }
       },
       include: {
         order: {

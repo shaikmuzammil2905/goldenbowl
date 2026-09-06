@@ -158,6 +158,17 @@ export class OrderService {
       }
     }
 
+    if (['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(dbStatus)) {
+      try {
+        await prisma.deliveryRequest.updateMany({
+          where: { orderId: id, status: 'PENDING' },
+          data: { status: 'ACCEPTED' }
+        });
+      } catch {
+        // Non-blocking
+      }
+    }
+
     if (dbStatus === 'CANCELLED') {
       await prisma.deliveryRequest.updateMany({
         where: { orderId: id, status: 'PENDING' },
