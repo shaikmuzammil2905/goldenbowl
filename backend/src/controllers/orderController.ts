@@ -69,4 +69,14 @@ export class OrderController {
       next(error);
     }
   }
+
+  static async requestDelivery(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const { partnerId } = req.body;
+      const request = await OrderService.sendDeliveryRequest(req.params.id as string, partnerId);
+      res.status(200).json({ success: true, message: 'Delivery request sent to partner', data: request });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

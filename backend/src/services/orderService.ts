@@ -61,32 +61,8 @@ export class OrderService {
     });
 
     if (payload.deliveryMethod === 'PARTNER') {
-      // Find eligible delivery partners (e.g. VERIFIED and active)
-      const partners = await prisma.deliveryPartner.findMany({
-        where: { verificationStatus: 'VERIFIED' },
-        take: 5
-      });
-      
-      if (partners.length > 0) {
-        // Create delivery requests
-        await prisma.deliveryRequest.createMany({
-          data: partners.map(p => ({
-            orderId: order.id,
-            partnerId: p.id,
-            status: 'PENDING'
-          }))
-        });
-
-        // Notify partners
-        await prisma.notification.createMany({
-          data: partners.map(p => ({
-            userId: p.userId,
-            role: 'DELIVERY',
-            title: 'New Delivery Request',
-            message: `Order ${orderId} is available for pickup. Distance: 3.2km, Payout: ₹45.`
-          }))
-        });
-      }
+      // Order created but NO auto-assignment or broadcasting of requests.
+      // Admin will manually send a request later.
     }
 
     // Notify Admin and Support
@@ -98,6 +74,49 @@ export class OrderService {
     });
 
     return order;
+  }
+
+  static async sendDeliveryRequest(orderId: string, partnerId: string) {
+    const order = await this.getOrderById(orderId);
+    if (!order) throw new NotFoundError(`Order ${orderId} not found`);
+    if (order.driverId) throw new BadRequestError(`Order ${orderId} is already assigned`);
+
+    const partner = await prisma.deliveryPartner.findUnique({
+      where: { id: partnerId }
+    });
+    if (!partner || partner.verificationStatus !== 'VERIFIED') {
+      throw new BadRequestError('Selected partner is not eligible for delivery');
+    }
+
+    // Check if a pending request already exists for this partner and order
+    const existingReq = await prisma.deliveryRequest.findFirst({
+      where: { orderId, partnerId, status: 'PENDING' }
+    });
+    
+    if (existingReq) {
+       return existingReq;
+    }
+
+    // Create delivery request
+    const request = await prisma.deliveryRequest.create({
+      data: {
+        orderId: order.id,
+        partnerId: partner.id,
+        status: 'PENDING'
+      }
+    });
+
+    // Notify partner
+    await prisma.notification.create({
+      data: {
+        userId: partner.userId,
+        role: 'DELIVERY',
+        title: 'New Delivery Request',
+        message: `Order ${orderId} is available for pickup. Please check your Pending Requests.`
+      }
+    });
+
+    return request;
   }
 
   static async updateOrderStatus(id: string, status: string) {

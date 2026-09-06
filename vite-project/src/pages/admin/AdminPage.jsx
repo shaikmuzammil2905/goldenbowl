@@ -111,7 +111,7 @@ export function AdminPage() {
       {path === 'categories' && <Categories />}
       {path === 'branches' && <Branches />}
       {path === 'customers' && <Customers liveOrders={liveOrders} />}
-      {path === 'delivery' && <Delivery />}
+      {path === 'delivery' && <Delivery liveOrders={liveOrders} fetchOrders={fetchOrders} />}
       {path === 'support' && <Support liveOrders={liveOrders} />}
       {path === 'reports' && <AdminReports />}
       {path === 'settings' && <Settings />}
@@ -463,9 +463,16 @@ function Orders({ orders = [], loading = false, fetchOrders }) {
                       <div style={{ fontSize: 11, color: '#78716c' }}>{p.vehicle} • ★ {p.rating}</div>
                     </div>
                     <button className="admin-action-btn" onClick={async () => {
-                      await orderApi.assignDeliveryPartner(assigningOrder.id, p.id);
-                      if (fetchOrders) fetchOrders();
-                      setAssigningOrder(null);
+                      if (assigningOrder.driverId && !window.confirm(`Are you sure you want to reassign this delivery to ${p.name}?`)) {
+                        return;
+                      }
+                      try {
+                        await orderApi.sendDeliveryRequest(assigningOrder.id, p.id);
+                        if (fetchOrders) fetchOrders();
+                        setAssigningOrder(null);
+                      } catch (err) {
+                        alert(`Failed to send request: ${err.message || String(err)}`);
+                      }
                     }}>
                       Assign
                     </button>
@@ -1376,12 +1383,15 @@ function Customers({ liveOrders = [] }) {
     </div>
   )
 }
-function Delivery() {
+function Delivery({ liveOrders = [], fetchOrders }) {
   const { deliveryPartners = [], deliverySettings = {} } = usePrototypeContext()
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [toast, setToast] = useState('')
   
+  // Delivery Assignment State
+  const [assigningOrder, setAssigningOrder] = useState(null)
+
   // Modal for individual partner fee editing
   const [editingPartner, setEditingPartner] = useState(null)
   const [customPartnerFee, setCustomPartnerFee] = useState('')
@@ -1481,7 +1491,154 @@ function Delivery() {
         </div>
       )}
 
+      {/* ── DELIVERY ASSIGNMENT MANAGEMENT ── */}
+      <section className="admin-table-card">
+        <div className="table-heading" style={{ flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Truck size={18} style={{ color: '#b4811d' }} /> Delivery Orders &amp; Assignment
+            </h2>
+            <span style={{ fontSize: 11, color: '#78716c' }}>
+              Manually assign unassigned delivery orders to eligible partners
+            </span>
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Customer</th>
+                <th>Amount</th>
+                <th>Delivery Status</th>
+                <th>Partner</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {liveOrders.filter(o => o.deliveryMethod === 'PARTNER').map(o => {
+                const dt = new Date(o.createdAt).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                return (
+                  <tr key={o.id}>
+                    <td>
+                      <strong>#{o.id}</strong>
+                      <span style={{ display: 'block', fontSize: 10, color: '#78716c' }}>{dt}</span>
+                    </td>
+                    <td>
+                      <strong>{o.customer}</strong>
+                      <span style={{ display: 'block', fontSize: 10, color: '#78716c' }}>{o.deliveryAddress || 'Address unavailable'}</span>
+                    </td>
+                    <td><strong>₹{o.total}</strong></td>
+                    <td>
+                      <span className={`table-status ${o.status.toLowerCase()}`}>
+                        {o.status.replaceAll('_', ' ')}
+                      </span>
+                    </td>
+                    <td>
+                      {o.status === 'UNASSIGNED' || !o.driverId ? (
+                        <span style={{ color: '#b91c1c', fontWeight: 800, fontSize: 11 }}>Not Assigned</span>
+                      ) : (
+                        <strong style={{ color: '#16a34a' }}>Partner Assigned</strong>
+                      )}
+                    </td>
+                    <td>
+                      {(!o.driverId || o.status === 'UNASSIGNED') ? (
+                        <button
+                          type="button"
+                          className="admin-action-btn"
+                          onClick={() => setAssigningOrder(o)}
+                        >
+                          Assign Delivery Partner
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          onClick={() => setAssigningOrder(o)}
+                        >
+                          View / Reassign
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+              {liveOrders.filter(o => o.deliveryMethod === 'PARTNER').length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: 30, color: '#78716c', fontSize: 12 }}>
+                    No delivery orders available.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ── ASSIGN PARTNER MODAL ── */}
+      {assigningOrder && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'grid', placeItems: 'center', padding: 16 }} onClick={() => setAssigningOrder(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 450, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: '0', fontSize: 18, fontWeight: 900 }}>Assign Delivery Partner</h3>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#78716c' }}>Order #{assigningOrder.id} • {assigningOrder.customer}</p>
+              </div>
+              <button type="button" onClick={() => setAssigningOrder(null)} style={{ border: 0, background: 'transparent', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 350, overflowY: 'auto', paddingRight: 4 }}>
+              {deliveryPartners.filter(p => p.verificationStatus === 'VERIFIED').map(p => (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, border: '1px solid #e2d8c8', borderRadius: 8, background: '#fffdf9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef3c7', color: '#b45309', display: 'grid', placeItems: 'center', fontWeight: 900, fontSize: 12 }}>
+                      {p.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 14 }}>{p.name}</div>
+                      <div style={{ fontSize: 11, color: '#78716c', display: 'flex', gap: 6 }}>
+                        <span><Phone size={10} style={{ display: 'inline', verticalAlign: 'middle' }} /> {p.mobile}</span>
+                        <span>• ★ {p.rating}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    type="button"
+                    className="admin-action-btn" 
+                    onClick={async () => {
+                      if (assigningOrder.driverId && !window.confirm(`Are you sure you want to reassign this delivery to ${p.name}?`)) {
+                        return;
+                      }
+                      try {
+                        await orderApi.sendDeliveryRequest(assigningOrder.id, p.id);
+                        if (fetchOrders) fetchOrders();
+                        setToast(`Delivery request sent to ${p.name}!`);
+                        setAssigningOrder(null);
+                        setTimeout(() => setToast(''), 3000);
+                      } catch (err) {
+                        alert(`Failed to send request: ${err.message || String(err)}`);
+                      }
+                    }}
+                  >
+                    Assign Partner
+                  </button>
+                </div>
+              ))}
+              {deliveryPartners.filter(p => p.verificationStatus === 'VERIFIED').length === 0 && (
+                <div style={{ padding: 20, textAlign: 'center', color: '#78716c', fontSize: 13 }}>No verified partners available.</div>
+              )}
+            </div>
+            
+            <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="secondary-btn" onClick={() => setAssigningOrder(null)} style={{ padding: '8px 16px', fontWeight: 700 }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* KPI Stats Grid — with Edit & Delete actions */}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
         <div style={{ background: '#fff', border: '1px solid #e2d8c8', borderLeft: '4px solid #b4811d', borderRadius: 14, padding: 14 }}>
           <span style={{ fontSize: 11, color: '#78716c', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>

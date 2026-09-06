@@ -49,6 +49,13 @@ export const orderApi = {
     });
   },
 
+  async sendDeliveryRequest(id, partnerId) {
+    return apiClient(`/orders/${id}/request-delivery`, {
+      method: 'POST',
+      body: { partnerId },
+    });
+  },
+
   async cancelOrder(id) {
     return apiClient(`/orders/${id}/cancel`, {
       method: 'POST',
