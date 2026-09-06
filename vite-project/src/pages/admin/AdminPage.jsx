@@ -353,12 +353,26 @@ function Orders({ orders = [], loading = false, fetchOrders }) {
                                 Assign Partner
                               </button>
                             ) : (
-                              <button className="admin-action-btn" onClick={async () => {
-                                await orderApi.updateOrderStatus(o.id, nextStatus(o.status));
-                                if (fetchOrders) fetchOrders();
-                              }}>
-                                Advance →
-                              </button>
+                              <select 
+                                className="admin-action-btn" 
+                                style={{ padding: '4px 6px', fontSize: 11, cursor: 'pointer', outline: 'none', background: '#b4811d', color: '#fff', border: 0, borderRadius: 6, fontWeight: 700 }}
+                                value=""
+                                onChange={async (e) => {
+                                  if (e.target.value) {
+                                    await orderApi.updateOrderStatus(o.id, e.target.value);
+                                    if (fetchOrders) fetchOrders();
+                                  }
+                                }}
+                              >
+                                <option value="" disabled>Advance →</option>
+                                <option value="CONFIRMED">Confirmed</option>
+                                <option value="PREPARING">Preparing</option>
+                                <option value="READY_FOR_PICKUP">Ready For Pickup</option>
+                                <option value="ASSIGNED">Assigned</option>
+                                <option value="PICKED_UP">Picked Up</option>
+                                <option value="OUT_FOR_DELIVERY">Out For Delivery</option>
+                                <option value="DELIVERED">Delivered</option>
+                              </select>
                             )}
                           </>
                         ) : (

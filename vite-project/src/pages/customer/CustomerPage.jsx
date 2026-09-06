@@ -788,7 +788,7 @@ function OrderDetail({id}) {
     </>
   )
 }
-function Tracking({id}){const {orders}=usePrototypeContext();const o=orders.find(x=>x.id===id)||orders[0];const driverName=o?.driver||'Assigned Partner';const initials=driverName.split(' ').map(x=>x[0]).join('').slice(0,2);return <><div className="route-map">🛵<span>• • • • •</span>🏠</div><h1>Arriving in {o?.eta||25} min</h1><p>Order #{o?.id} • {o?.status?.replaceAll('_',' ')}</p><div className="route-driver"><span>{initials}</span><div><strong>{driverName}</strong><small>Delivery partner</small></div><a href={`tel:${o?.driverMobile||'9999999999'}`} style={{background:'#1c1917',color:'#f5c518',padding:'6px 16px',borderRadius:16,textDecoration:'none',fontSize:12,fontWeight:800}}>Call</a></div></>}
+function Tracking({id}){const {orders}=usePrototypeContext();const o=orders.find(x=>x.id===id)||orders[0];const hasDriver=!!o?.driver;const driverName=o?.driver||'Waiting for Partner';const initials=hasDriver?driverName.split(' ').map(x=>x[0]).join('').slice(0,2):'🕒';return <><div className="route-map">🛵<span>• • • • •</span>🏠</div><h1>Arriving in {o?.eta||25} min</h1><p>Order #{o?.id} • {o?.status?.replaceAll('_',' ')}</p><div className="route-driver"><span>{initials}</span><div><strong>{driverName}</strong><small>{hasDriver?'Delivery partner':'Partner will be assigned soon'}</small></div>{hasDriver&&<a href={`tel:${o?.driverMobile||'9999999999'}`} style={{background:'#1c1917',color:'#f5c518',padding:'6px 16px',borderRadius:16,textDecoration:'none',fontSize:12,fontWeight:800}}>Call</a>}</div></>}
 function Profile() {
   const navigate = useNavigate()
   const [activeModal, setActiveModal] = React.useState(null)
