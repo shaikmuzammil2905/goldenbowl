@@ -103,12 +103,48 @@ export class DeliveryController {
     try {
       const requestId = req.params.id as string;
       const userId = req.user?.id;
-      const partner = await DeliveryService.getPartnerByUserId(userId || '');
-      if (!partner) throw new Error('Partner profile not found for this user');
-      const order = await DeliveryService.acceptDeliveryRequest(requestId, partner.id);
-      res.status(200).json({ success: true, message: 'Request accepted', data: order });
-    } catch (error) {
-      next(error);
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const partner = await DeliveryService.getPartnerByUserId(userId);
+      if (!partner) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Your delivery partner account is not properly configured.' 
+        });
+      }
+
+      const order = await DeliveryService.acceptDeliveryRequest(requestId, partner.id, userId);
+      res.status(200).json({ success: true, message: 'Delivery accepted successfully', data: order });
+    } catch (error: any) {
+      const statusCode = error.statusCode || (error.name === 'NotFoundError' ? 404 : 400);
+      const safeMessage = error.message && !error.message.includes('prisma.') 
+        ? error.message 
+        : 'Unable to accept this delivery right now. Please try again.';
+      res.status(statusCode).json({ success: false, message: safeMessage });
+    }
+  }
+
+  static async updateDeliveryStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const orderId = (req.params.orderId || req.params.id) as string;
+      const { status } = req.body;
+      const userId = req.user?.id;
+      const userRole = req.user?.role;
+
+      if (!status) {
+        return res.status(400).json({ success: false, message: 'Status is required' });
+      }
+
+      const result = await DeliveryService.updateDeliveryStatus(orderId, status, userId, userRole);
+      res.status(200).json({ success: true, message: 'Delivery status updated', data: result });
+    } catch (error: any) {
+      const statusCode = error.statusCode || (error.name === 'NotFoundError' ? 404 : 400);
+      const safeMessage = error.message && !error.message.includes('prisma.')
+        ? error.message
+        : 'Unable to update delivery status. Please try again.';
+      res.status(statusCode).json({ success: false, message: safeMessage });
     }
   }
 

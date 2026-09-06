@@ -19,4 +19,8 @@ router.get('/requests/pending', authenticateToken, authorizeRoles('DELIVERY', 'A
 router.post('/requests/:id/accept', authenticateToken, authorizeRoles('DELIVERY', 'ADMIN'), logAuditAction('ACCEPT_DELIVERY', 'DeliveryRequest'), DeliveryController.acceptRequest);
 router.post('/requests/:id/reject', authenticateToken, authorizeRoles('DELIVERY', 'ADMIN'), logAuditAction('REJECT_DELIVERY', 'DeliveryRequest'), DeliveryController.rejectRequest);
 
+router.patch('/orders/:orderId/status', authenticateToken, authorizeRoles('DELIVERY', 'ADMIN', 'SUPPORT'), logAuditAction('UPDATE_DELIVERY_STATUS', 'Order'), DeliveryController.updateDeliveryStatus);
+router.post('/orders/:orderId/status', authenticateToken, authorizeRoles('DELIVERY', 'ADMIN', 'SUPPORT'), logAuditAction('UPDATE_DELIVERY_STATUS', 'Order'), DeliveryController.updateDeliveryStatus);
+
 export default router;
+

@@ -1,6 +1,8 @@
 import { prisma } from '../config/prisma.js';
-import { NotFoundError, BadRequestError, ConflictError } from '../utils/errors.js';
+import { NotFoundError, BadRequestError, ConflictError, ForbiddenError } from '../utils/errors.js';
 import { normalizeEmail, normalizePhone, hashPassword } from '../utils/authUtils.js';
+import { logger } from '../utils/logger.js';
+import { isValidDeliveryTransition, mapDeliveryStageToDbStatus } from '../constants/deliveryLifecycle.js';
 
 export class DeliveryService {
   static async getPartners() {
@@ -209,22 +211,6 @@ export class DeliveryService {
         user: {
           select: { id: true, name: true, email: true, mobile: true, role: true },
         },
-        assignedOrders: {
-          include: {
-            items: {
-              include: { product: true },
-            },
-            branch: true,
-            customerUser: {
-              select: { name: true, email: true, mobile: true },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-        },
-        deliveryRequests: {
-          where: { status: 'PENDING' },
-          include: { order: { include: { branch: true, customerUser: true } } }
-        }
       },
     });
 
@@ -248,22 +234,6 @@ export class DeliveryService {
             user: {
               select: { id: true, name: true, email: true, mobile: true, role: true },
             },
-            assignedOrders: {
-              include: {
-                items: {
-                  include: { product: true },
-                },
-                branch: true,
-                customerUser: {
-                  select: { name: true, email: true, mobile: true },
-                },
-              },
-              orderBy: { createdAt: 'desc' },
-            },
-            deliveryRequests: {
-              where: { status: 'PENDING' },
-              include: { order: { include: { branch: true, customerUser: true } } }
-            }
           },
         });
       }
@@ -273,12 +243,34 @@ export class DeliveryService {
       throw new NotFoundError('Delivery partner account not found');
     }
 
-    const assignedOrders = (partner.assignedOrders || []).map((o: any) => ({
+    // Comprehensive query for assigned orders matching either partner.id or partner.userId
+    const rawAssignedOrders = await prisma.order.findMany({
+      where: {
+        OR: [
+          { driverId: partner.id },
+          ...(partner.userId ? [{ driverId: partner.userId }] : [])
+        ]
+      },
+      include: {
+        items: {
+          include: { product: true },
+        },
+        branch: true,
+        customerUser: {
+          select: { name: true, email: true, mobile: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const assignedOrders = rawAssignedOrders.map((o: any) => ({
       id: o.id,
       customer: o.customerName || o.customerUser?.name || 'Customer',
       customerPhone: o.customerUser?.mobile || '',
       branch: o.branch?.name || 'Golden Food Bowl',
       branchAddress: o.branch?.address || '100ft Road, 12th Main, Indiranagar',
+      deliveryAddress: o.deliveryAddress || 'Customer Address',
+      addressType: o.addressType || 'Home',
       total: Number(o.totalAmount || 0),
       status: o.status,
       orderType: o.orderType || 'Delivery',
@@ -294,9 +286,28 @@ export class DeliveryService {
       (o: any) => o.status === 'DELIVERED'
     );
 
+    // Fetch pending requests for this partner
+    const pendingRequests = await prisma.deliveryRequest.findMany({
+      where: {
+        partnerId: partner.id,
+        status: 'PENDING'
+      },
+      include: {
+        order: {
+          include: {
+            branch: true,
+            customerUser: { select: { name: true, email: true, mobile: true } },
+            items: { include: { product: true } }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
     return {
       partner: {
         id: partner.id,
+        userId: partner.userId,
         name: partner.name,
         email: partner.user?.email || '',
         mobile: partner.mobile || partner.user?.mobile || '',
@@ -313,6 +324,7 @@ export class DeliveryService {
         trips: partner.trips,
         completedTrips: completedOrders.length,
         activeTrips: activeOrders.length,
+        pendingRequests: pendingRequests.length,
         onTimeRate: partner.trips > 0 ? 100 : 0,
         acceptanceRate: partner.trips > 0 ? 100 : 0,
         rating: partner.rating,
@@ -320,7 +332,7 @@ export class DeliveryService {
       activeOrders,
       completedOrders,
       assignedOrders,
-      pendingRequests: (partner as any).deliveryRequests || [],
+      pendingRequests,
     };
   }
 
@@ -380,37 +392,129 @@ export class DeliveryService {
     });
   }
 
-  static async acceptDeliveryRequest(requestId: string, partnerId: string) {
+  /**
+   * Helper to safely determine which ID (delivery_partners.id or users.id)
+   * satisfies the orders_driverId_fkey constraint.
+   */
+  private static async getDriverForeignKeyTarget(): Promise<'users' | 'delivery_partners'> {
+    try {
+      const res: any = await prisma.$queryRawUnsafe(`
+        SELECT ccu.table_name AS foreign_table_name
+        FROM information_schema.table_constraints AS tc 
+        JOIN information_schema.constraint_column_usage AS ccu
+          ON ccu.constraint_name = tc.constraint_name
+        WHERE tc.constraint_name = 'orders_driverId_fkey'
+        LIMIT 1;
+      `);
+      if (Array.isArray(res) && res.length > 0 && res[0]?.foreign_table_name) {
+        const tbl = String(res[0].foreign_table_name).toLowerCase();
+        if (tbl.includes('user')) return 'users';
+      }
+    } catch {
+      // Fallback to delivery_partners if information_schema query is unavailable
+    }
+    return 'delivery_partners';
+  }
+
+  static async acceptDeliveryRequest(requestId: string, requestingPartnerId: string, authenticatedUserId?: string) {
     const request = await prisma.deliveryRequest.findUnique({
       where: { id: requestId },
-      include: { partner: true }
+      include: { 
+        partner: { include: { user: true } },
+        order: { include: { branch: true, customerUser: true } }
+      }
     });
     
     if (!request) {
-      throw new BadRequestError('Delivery request not found');
+      throw new NotFoundError('Delivery request not found.');
     }
 
     if (request.status !== 'PENDING') {
-      throw new BadRequestError(`This delivery request is already ${request.status.toLowerCase()}`);
+      if (request.status === 'ACCEPTED') {
+        throw new BadRequestError('This delivery request has already been accepted.');
+      }
+      throw new BadRequestError(`This delivery request is no longer available (${request.status.toLowerCase()}).`);
     }
 
-    // Use transaction to ensure no double assignment
+    if (!request.order) {
+      throw new NotFoundError('Order associated with this request not found.');
+    }
+
+    if (request.order.driverId) {
+      throw new BadRequestError('Sorry, this delivery has already been accepted by another partner.');
+    }
+
+    if (request.order.status === 'CANCELLED') {
+      throw new BadRequestError('This order has been cancelled.');
+    }
+
+    // Determine the partner entity to assign
+    let partnerToAssign = request.partner;
+    if (requestingPartnerId) {
+      const foundPartner = await prisma.deliveryPartner.findUnique({
+        where: { id: requestingPartnerId },
+        include: { user: true }
+      });
+      if (foundPartner) {
+        partnerToAssign = foundPartner;
+      }
+    }
+
+    if (!partnerToAssign) {
+      throw new BadRequestError('Your delivery partner account is not properly configured.');
+    }
+
+    // Atomic transaction to ensure mutual exclusion
     return prisma.$transaction(async (tx) => {
+      // Check order is still unassigned
+      const freshOrder = await tx.order.findUnique({
+        where: { id: request.orderId },
+        select: { driverId: true, status: true }
+      });
+
+      if (!freshOrder) {
+        throw new NotFoundError('Order not found.');
+      }
+      if (freshOrder.driverId) {
+        throw new BadRequestError('Sorry, this delivery has already been accepted by another partner.');
+      }
+
       // Mark this request as accepted
       await tx.deliveryRequest.update({
         where: { id: requestId },
         data: { status: 'ACCEPTED' }
       });
-      
-      // Assign the order
-      const order = await tx.order.update({
-        where: { id: request.orderId },
-        data: { 
-          driverId: partnerId,
-          status: 'ASSIGNED'
-        },
-        include: { driver: true, branch: true }
-      });
+
+      // Try assigning using the primary foreign key target, with automated fallback
+      const fkTarget = await DeliveryService.getDriverForeignKeyTarget();
+      const primaryId = fkTarget === 'users' ? (partnerToAssign.userId || partnerToAssign.id) : partnerToAssign.id;
+      const fallbackId = primaryId === partnerToAssign.id ? (partnerToAssign.userId || partnerToAssign.id) : partnerToAssign.id;
+
+      let order;
+      try {
+        order = await tx.order.update({
+          where: { id: request.orderId },
+          data: { 
+            driverId: primaryId,
+            status: 'ASSIGNED'
+          },
+          include: { driver: true, branch: true, customerUser: true, items: { include: { product: true } } }
+        });
+      } catch (err: any) {
+        if (err.message?.includes('orders_driverId_fkey')) {
+          logger.warn(`[AcceptDelivery] orders_driverId_fkey retry with fallback ID: ${fallbackId}`);
+          order = await tx.order.update({
+            where: { id: request.orderId },
+            data: { 
+              driverId: fallbackId,
+              status: 'ASSIGNED'
+            },
+            include: { driver: true, branch: true, customerUser: true, items: { include: { product: true } } }
+          });
+        } else {
+          throw err;
+        }
+      }
       
       // Mark any other pending requests for this order as rejected
       await tx.deliveryRequest.updateMany({
@@ -422,14 +526,34 @@ export class DeliveryService {
         data: { status: 'REJECTED' }
       });
 
-      // Notify admin
-      await tx.notification.create({
-        data: {
-          role: 'ADMIN',
-          title: 'Delivery Request Accepted',
-          message: `Delivery Partner ${order.driver?.name || 'Partner'} accepted Order #${order.id}. Order is now ASSIGNED.`
+      // Customer notification
+      if (order.customerId) {
+        try {
+          await tx.notification.create({
+            data: {
+              userId: order.customerId,
+              role: 'CUSTOMER',
+              title: 'Delivery Partner Assigned',
+              message: `${partnerToAssign.name} has accepted your order #${order.id} and is heading to the restaurant.`
+            }
+          });
+        } catch {
+          // Non-blocking notification
         }
-      });
+      }
+
+      // Admin notification
+      try {
+        await tx.notification.create({
+          data: {
+            role: 'ADMIN',
+            title: 'Delivery Request Accepted',
+            message: `Delivery Partner ${partnerToAssign.name} accepted Order #${order.id}. Order is now ASSIGNED.`
+          }
+        });
+      } catch {
+        // Non-blocking notification
+      }
       
       return order;
     });
@@ -447,16 +571,106 @@ export class DeliveryService {
     });
 
     if (request) {
-      await prisma.notification.create({
-        data: {
-          role: 'ADMIN',
-          title: 'Delivery Request Declined',
-          message: `Delivery Partner ${request.partner?.name || 'Partner'} declined Order #${request.orderId}. Admin may assign another partner.`
-        }
-      });
+      try {
+        await prisma.notification.create({
+          data: {
+            role: 'ADMIN',
+            title: 'Delivery Request Declined',
+            message: `Delivery Partner ${request.partner?.name || 'Partner'} declined Order #${request.orderId}. Admin may assign another partner.`
+          }
+        });
+      } catch {
+        // Non-blocking
+      }
     }
 
     return updated;
+  }
+
+  static async updateDeliveryStatus(orderId: string, nextStage: string, driverUserId?: string, userRole?: string) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { driver: true, branch: true, customerUser: true }
+    });
+
+    if (!order) {
+      throw new NotFoundError(`Order ${orderId} not found.`);
+    }
+
+    // Role security check: only assigned driver or admin/support can update
+    if (userRole !== 'ADMIN' && userRole !== 'SUPPORT' && driverUserId) {
+      const partner = await this.getPartnerByUserId(driverUserId);
+      if (!partner || (order.driverId !== partner.id && order.driverId !== partner.userId)) {
+        throw new ForbiddenError('You are not authorized to update this order delivery status.');
+      }
+    }
+
+    const currentStatus = order.status;
+    const cleanStage = String(nextStage || '').toUpperCase().trim();
+
+    // Validate state transition
+    if (!isValidDeliveryTransition(currentStatus, cleanStage)) {
+      throw new BadRequestError(`Invalid status transition from ${currentStatus} to ${cleanStage}.`);
+    }
+
+    const dbStatus = mapDeliveryStageToDbStatus(cleanStage);
+
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: { status: dbStatus },
+      include: { driver: true, branch: true, customerUser: true, items: { include: { product: true } } }
+    });
+
+    // If order was delivered and has an assigned driver, increment driver trips and earnings
+    if (dbStatus === 'DELIVERED' && order.driverId) {
+      try {
+        const d = await prisma.deliveryPartner.findFirst({
+          where: { OR: [{ id: order.driverId }, { userId: order.driverId }] }
+        });
+        if (d) {
+          await prisma.deliveryPartner.update({
+            where: { id: d.id },
+            data: {
+              trips: { increment: 1 },
+              earnings: { increment: 120.00 }
+            }
+          });
+        }
+      } catch (err: any) {
+        logger.error(`Failed to update driver earnings/trips: ${err.message}`);
+      }
+    }
+
+    // Customer Notification
+    if (order.customerId) {
+      try {
+        const stageMessages: Record<string, string> = {
+          ARRIVING_AT_PICKUP: 'Your delivery partner is on the way to the restaurant.',
+          AT_PICKUP: 'Your delivery partner has arrived at the restaurant.',
+          PICKED_UP: 'Your order has been picked up from the restaurant!',
+          OUT_FOR_DELIVERY: 'Your order is on the way to your delivery address!',
+          ON_THE_WAY: 'Your order is on the way to your delivery address!',
+          ARRIVING_AT_CUSTOMER: 'Your delivery partner is near your location!',
+          DELIVERED: `Your order #${order.id} has been delivered. Enjoy your meal!`,
+        };
+        const msg = stageMessages[cleanStage] || `Order ${orderId} is now ${cleanStage.replace(/_/g, ' ').toLowerCase()}.`;
+        await prisma.notification.create({
+          data: {
+            userId: order.customerId,
+            role: 'CUSTOMER',
+            title: 'Order Status Update',
+            message: msg
+          }
+        });
+      } catch {
+        // Non-blocking
+      }
+    }
+
+    return {
+      ...updated,
+      deliveryStage: cleanStage
+    };
   }
 
   static async getPendingRequests(partnerId: string) {
@@ -467,7 +681,11 @@ export class DeliveryService {
       },
       include: {
         order: {
-          include: { branch: true }
+          include: { 
+            branch: true,
+            customerUser: { select: { name: true, email: true, mobile: true } },
+            items: { include: { product: true } }
+          }
         }
       },
       orderBy: { createdAt: 'desc' }

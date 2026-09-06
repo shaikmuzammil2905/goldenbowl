@@ -85,11 +85,19 @@ export function AdminPage() {
     try {
       const res = await orderApi.getOrders()
       const fetched = Array.isArray(res?.data) ? res.data : (Array.isArray(res?.orders) ? res.orders : (Array.isArray(res) ? res : []))
-      // Map API response to match UI fields
+      // Map API response to match UI fields and preserve all order properties
       const mapped = fetched.map(o => ({
+        ...o,
         id: o?.id || '',
-        customer: o?.customerName || (o?.customerUser ? o.customerUser.name : 'Guest'),
-        branch: o?.branch?.name || o?.branch || '-',
+        customer: o?.customerName || (o?.customerUser ? o.customerUser.name : (o?.customer || 'Guest')),
+        customerMobile: o?.customerMobile || o?.customerPhone || o?.customerUser?.mobile || '',
+        customerEmail: o?.customerEmail || o?.customerUser?.email || '',
+        branch: o?.branch?.name || o?.branch || 'Indiranagar',
+        branchAddress: o?.branch?.address || o?.branchAddress || '100ft Road, Indiranagar',
+        deliveryAddress: o?.deliveryAddress || 'Delivery Address',
+        deliveryMethod: o?.deliveryMethod || 'PARTNER',
+        driverId: o?.driverId || null,
+        driver: o?.driver || null,
         total: Number(o?.totalAmount || o?.total || 0),
         status: o?.status || 'PENDING',
         createdAt: o?.createdAt || new Date().toISOString(),
