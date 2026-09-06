@@ -6,7 +6,13 @@ import { OrderService } from '../services/orderService.js';
 export class OrderController {
   static async getOrders(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { status, customer } = req.query;
+      let { status, customer } = req.query;
+      
+      // Enforce data scoping for customers
+      if (req.user?.role === 'CUSTOMER') {
+        customer = req.user.id;
+      }
+      
       const orders = await OrderService.getOrders({
         status: status as string,
         customerId: customer as string,

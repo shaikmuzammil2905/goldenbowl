@@ -174,7 +174,7 @@ export async function syncWithBackend() {
       const ordersRes = await apiClient('/orders', { fallback: null })
       if (ordersRes && Array.isArray(ordersRes.data)) {
         const liveOrders = ordersRes.data
-          .filter(o => o && !mockOrderIds.has(o.id) && !mockCustomerNames.has(o.customerName))
+          .filter(o => o)
           .map(o => ({
             id: o.id,
             items: o.items || [],
@@ -194,7 +194,7 @@ export async function syncWithBackend() {
         const orderMap = new Map()
         liveOrders.forEach(o => orderMap.set(o.id, o))
         ;(state.orders || []).forEach(o => {
-          if (!orderMap.has(o.id) && !mockOrderIds.has(o.id) && !mockCustomerNames.has(o.customer)) {
+          if (!orderMap.has(o.id)) {
             orderMap.set(o.id, o)
           }
         })

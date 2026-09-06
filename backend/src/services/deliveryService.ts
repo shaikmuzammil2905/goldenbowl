@@ -221,6 +221,10 @@ export class DeliveryService {
           },
           orderBy: { createdAt: 'desc' },
         },
+        deliveryRequests: {
+          where: { status: 'PENDING' },
+          include: { order: { include: { branch: true, customerUser: true } } }
+        }
       },
     });
 
