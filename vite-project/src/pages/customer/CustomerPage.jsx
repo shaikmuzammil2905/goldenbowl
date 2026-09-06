@@ -362,7 +362,7 @@ function Checkout(){
   </>}<h2>Order total</h2><div className="route-summary"><span>Total <b>{money(cart.total)}</b></span></div><button type="button" className="route-primary" onClick={()=>{localStorage.setItem(CHECKOUT_KEY,JSON.stringify({...cart,type,branch:selectedBranch.id,address: address?.address, addressType: address?.type}));navigate('/customer/payment')}}>Continue to Payment</button></>}
 function Payment() {
   const navigate = useNavigate();
-  const { branches: storeBranches } = usePrototypeContext();
+  const { branches: storeBranches, deliverySettings } = usePrototypeContext();
   const [method, setMethod] = React.useState('Razorpay');
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [paymentNotice, setPaymentNotice] = React.useState(null);
@@ -405,7 +405,8 @@ function Payment() {
         branchId: branch?.id || 1,
         customerName: customerName,
         deliveryAddress: cart.address,
-        addressType: cart.addressType || 'Home'
+        addressType: cart.addressType || 'Home',
+        deliveryMethod: deliverySettings?.defaultMethod || 'DIRECT'
       });
       const order = orderRes.data || orderRes;
       localStorage.removeItem(CART_KEY);
