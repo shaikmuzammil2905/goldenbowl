@@ -215,9 +215,11 @@ export function DeliveryPage() {
 /* ── DASHBOARD VIEW ──────────────────────────────────────────── */
 function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty, onRefresh }) {
   const [advancing, setAdvancing] = useState(false)
+  const [actionLoading, setActionLoading] = useState({})
+  const [actionFeedback, setActionFeedback] = useState(null)
 
   const advanceStatus = async (next) => {
-    if (!next) return
+    if (!next || !current) return
     setAdvancing(true)
     try {
       const res = await apiClient(`/orders/${current.id}/status`, {
@@ -225,12 +227,81 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
         body: { status: next },
       })
       if (res && res.success) {
+        setActionFeedback({ 
+          type: 'success', 
+          message: `Order #${current.id} status updated to ${next.replaceAll('_', ' ')}!` 
+        })
         await onRefresh()
+      } else {
+        setActionFeedback({ 
+          type: 'error', 
+          message: res?.message || 'Failed to update order status' 
+        })
       }
     } catch (err) {
       console.error('Failed to advance order status:', err)
+      setActionFeedback({ 
+        type: 'error', 
+        message: err.message || 'Failed to update order status' 
+      })
     } finally {
       setAdvancing(false)
+    }
+  }
+
+  const handleAccept = async (req) => {
+    setActionLoading(prev => ({ ...prev, [req.id]: 'accepting' }))
+    setActionFeedback(null)
+    try {
+      const res = await apiClient(`/delivery/requests/${req.id}/accept`, { method: 'POST' })
+      if (res && res.success) {
+        setActionFeedback({ 
+          type: 'success', 
+          message: `Order #${req.orderId} Accepted! Order status is now ASSIGNED.` 
+        })
+        await onRefresh()
+      } else {
+        setActionFeedback({ 
+          type: 'error', 
+          message: res?.message || 'Failed to accept delivery request' 
+        })
+      }
+    } catch (err) {
+      console.error('Failed to accept delivery request:', err)
+      setActionFeedback({ 
+        type: 'error', 
+        message: err.message || 'Failed to accept delivery request' 
+      })
+    } finally {
+      setActionLoading(prev => ({ ...prev, [req.id]: null }))
+    }
+  }
+
+  const handleReject = async (req) => {
+    setActionLoading(prev => ({ ...prev, [req.id]: 'rejecting' }))
+    setActionFeedback(null)
+    try {
+      const res = await apiClient(`/delivery/requests/${req.id}/reject`, { method: 'POST' })
+      if (res && res.success) {
+        setActionFeedback({ 
+          type: 'info', 
+          message: `Delivery request for Order #${req.orderId} was declined.` 
+        })
+        await onRefresh()
+      } else {
+        setActionFeedback({ 
+          type: 'error', 
+          message: res?.message || 'Failed to decline delivery request' 
+        })
+      }
+    } catch (err) {
+      console.error('Failed to reject delivery request:', err)
+      setActionFeedback({ 
+        type: 'error', 
+        message: err.message || 'Failed to decline delivery request' 
+      })
+    } finally {
+      setActionLoading(prev => ({ ...prev, [req.id]: null }))
     }
   }
 
@@ -241,6 +312,12 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
     }, 5000)
     return () => clearInterval(interval)
   }, [onRefresh])
+
+  const nextStepMap = {
+    ASSIGNED: { next: 'PICKED_UP', label: '🛵 Mark Picked Up' },
+    PICKED_UP: { next: 'OUT_FOR_DELIVERY', label: '🚀 Mark Out for Delivery' },
+    OUT_FOR_DELIVERY: { next: 'DELIVERED', label: '✅ Mark Delivered' },
+  }
 
   return (
     <>
@@ -263,6 +340,33 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
         </button>
       </div>
 
+      {/* Action / Status Feedback Banner */}
+      {actionFeedback && (
+        <div style={{
+          padding: '12px 16px',
+          borderRadius: '12px',
+          marginBottom: '16px',
+          fontSize: '13px',
+          fontWeight: 700,
+          background: actionFeedback.type === 'success' ? '#dcfce7' : actionFeedback.type === 'info' ? '#e0f2fe' : '#fee2e2',
+          color: actionFeedback.type === 'success' ? '#15803d' : actionFeedback.type === 'info' ? '#0369a1' : '#b91c1c',
+          border: `1px solid ${actionFeedback.type === 'success' ? '#86efac' : actionFeedback.type === 'info' ? '#7dd3fc' : '#fca5a5'}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12
+        }}>
+          <span>{actionFeedback.message}</span>
+          <button
+            type="button"
+            onClick={() => setActionFeedback(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, color: 'inherit', fontSize: 14 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Pending Requests Section */}
       {pendingRequests.length > 0 && (
         <>
@@ -270,44 +374,43 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
             <h2>Delivery Requests</h2>
             <span>{pendingRequests.length} Pending</span>
           </div>
-          {pendingRequests.map(req => (
-            <div key={req.id} className="dp-order-card" style={{ marginBottom: 16 }}>
-              <div className="dp-order-head">
-                <div className="dp-order-id">
-                  <strong>#{req.orderId}</strong>
-                  <span>• {req.order?.branch?.name || 'Golden Food Bowl'}</span>
+          {pendingRequests.map(req => {
+            const isLoadingThis = actionLoading[req.id]
+            return (
+              <div key={req.id} className="dp-order-card" style={{ marginBottom: 16 }}>
+                <div className="dp-order-head">
+                  <div className="dp-order-id">
+                    <strong>#{req.orderId}</strong>
+                    <span>• {req.order?.branch?.name || 'Golden Food Bowl'}</span>
+                  </div>
+                  <span className="dp-status-pill pending" style={{ background: '#fef9c3', color: '#854d0e', fontWeight: 800 }}>NEW REQUEST</span>
                 </div>
-                <span className="dp-status-pill pending" style={{ background: '#fef9c3', color: '#854d0e', fontWeight: 800 }}>NEW REQUEST</span>
+                <div style={{ padding: '16px 20px', fontSize: 13, color: '#444' }}>
+                  Distance: ~3.2km • Est Payout: ₹45
+                </div>
+                <div className="dp-action-stack" style={{ flexDirection: 'row', gap: 10 }}>
+                  <button
+                    type="button"
+                    className="dp-advance-btn"
+                    disabled={!!isLoadingThis}
+                    style={{ flex: 1, background: '#16a34a', color: '#fff', cursor: isLoadingThis ? 'not-allowed' : 'pointer', opacity: isLoadingThis ? 0.7 : 1 }}
+                    onClick={() => handleAccept(req)}
+                  >
+                    {isLoadingThis === 'accepting' ? 'Accepting...' : '✓ Accept Delivery'}
+                  </button>
+                  <button
+                    type="button"
+                    className="dp-advance-btn"
+                    disabled={!!isLoadingThis}
+                    style={{ flex: 1, background: '#fee2e2', color: '#b91c1c', cursor: isLoadingThis ? 'not-allowed' : 'pointer', opacity: isLoadingThis ? 0.7 : 1 }}
+                    onClick={() => handleReject(req)}
+                  >
+                    {isLoadingThis === 'rejecting' ? 'Declining...' : '✕ Decline'}
+                  </button>
+                </div>
               </div>
-              <div style={{ padding: '16px 20px', fontSize: 13, color: '#444' }}>
-                Distance: ~3.2km • Est Payout: ₹45
-              </div>
-              <div className="dp-action-stack" style={{ flexDirection: 'row', gap: 10 }}>
-                <button
-                  type="button"
-                  className="dp-advance-btn"
-                  style={{ flex: 1, background: '#16a34a', color: '#fff' }}
-                  onClick={async () => {
-                    await apiClient(`/delivery/requests/${req.id}/accept`, { method: 'POST' });
-                    onRefresh();
-                  }}
-                >
-                  Accept Delivery
-                </button>
-                <button
-                  type="button"
-                  className="dp-advance-btn"
-                  style={{ flex: 1, background: '#fee2e2', color: '#b91c1c' }}
-                  onClick={async () => {
-                    await apiClient(`/delivery/requests/${req.id}/reject`, { method: 'POST' });
-                    onRefresh();
-                  }}
-                >
-                  Decline
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </>
       )}
 
@@ -402,22 +505,50 @@ function DashboardView({ current, assigned, pendingRequests = [], duty, setDuty,
           {/* Action Buttons */}
           <div className="dp-action-stack">
             {current.status !== 'DELIVERED' ? (
-              <select
-                className="dp-advance-btn"
-                disabled={advancing}
-                value=""
-                onChange={(e) => advanceStatus(e.target.value)}
-                style={{ appearance: 'none', textAlign: 'center', background: '#1c1917', color: '#f5c518', border: 'none', fontWeight: 800, padding: '14px', borderRadius: '12px', fontSize: '13px' }}
-              >
-                <option value="" disabled>{advancing ? 'Updating Status...' : 'Advance Status (Click for Options)'}</option>
-                <option value="ASSIGNED">Assigned & Head to Restaurant</option>
-                <option value="PICKED_UP">Picked Up</option>
-                <option value="OUT_FOR_DELIVERY">Out for Delivery</option>
-                <option value="DELIVERED">Delivered</option>
-              </select>
+              <>
+                {nextStepMap[current.status] && (
+                  <button
+                    type="button"
+                    className="dp-advance-btn"
+                    disabled={advancing}
+                    onClick={() => advanceStatus(nextStepMap[current.status].next)}
+                    style={{
+                      background: '#ca8a04',
+                      color: '#000',
+                      fontWeight: 800,
+                      padding: '14px',
+                      borderRadius: '12px',
+                      fontSize: '14px',
+                      border: 'none',
+                      cursor: advancing ? 'not-allowed' : 'pointer',
+                      opacity: advancing ? 0.7 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      boxShadow: '0 4px 12px rgba(202, 138, 4, 0.3)'
+                    }}
+                  >
+                    {advancing ? 'Updating Status...' : nextStepMap[current.status].label}
+                  </button>
+                )}
+                <select
+                  className="dp-advance-btn"
+                  disabled={advancing}
+                  value=""
+                  onChange={(e) => advanceStatus(e.target.value)}
+                  style={{ appearance: 'none', textAlign: 'center', background: '#292524', color: '#e7e5e4', border: '1px solid #44403c', fontWeight: 600, padding: '11px', borderRadius: '10px', fontSize: '12px', cursor: 'pointer' }}
+                >
+                  <option value="" disabled>{advancing ? 'Updating Status...' : 'Switch status directly...'}</option>
+                  <option value="ASSIGNED">Assigned & Head to Restaurant</option>
+                  <option value="PICKED_UP">Picked Up</option>
+                  <option value="OUT_FOR_DELIVERY">Out for Delivery</option>
+                  <option value="DELIVERED">Delivered</option>
+                </select>
+              </>
             ) : (
-              <div style={{ textAlign: 'center', padding: '10px', color: '#16a34a', fontWeight: 800 }}>
-                ✓ Order Completed! Great job.
+              <div style={{ textAlign: 'center', padding: '12px', color: '#16a34a', fontWeight: 800, background: '#dcfce7', borderRadius: '10px' }}>
+                ✓ Order Completed & Delivered!
               </div>
             )}
 

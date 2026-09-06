@@ -331,6 +331,42 @@ export class DeliveryService {
     });
   }
 
+  static async getPartnerByUserId(userId: string) {
+    if (!userId) return null;
+    let partner = await prisma.deliveryPartner.findUnique({
+      where: { userId },
+      include: { user: true },
+    });
+    if (!partner) {
+      // Fallback: check if id was supplied directly
+      partner = await prisma.deliveryPartner.findUnique({
+        where: { id: userId },
+        include: { user: true },
+      });
+    }
+    if (!partner) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (user) {
+        partner = await prisma.deliveryPartner.create({
+          data: {
+            userId: user.id,
+            name: user.name,
+            mobile: user.mobile || '',
+            vehicle: 'Bike',
+            verificationStatus: 'VERIFIED',
+            documentsVerified: true,
+            feeStatus: 'PAID',
+            trips: 0,
+            earnings: 0.0,
+            rating: 5.0,
+          },
+          include: { user: true },
+        });
+      }
+    }
+    return partner;
+  }
+
   static async updatePartnerProfile(id: string, data: any) {
     const updateData: any = {};
     if (data.vehicle !== undefined) updateData.vehicle = data.vehicle;
@@ -343,13 +379,19 @@ export class DeliveryService {
       include: { user: true },
     });
   }
+
   static async acceptDeliveryRequest(requestId: string, partnerId: string) {
     const request = await prisma.deliveryRequest.findUnique({
-      where: { id: requestId }
+      where: { id: requestId },
+      include: { partner: true }
     });
     
-    if (!request || request.status !== 'PENDING') {
-      throw new BadRequestError('Request is not available');
+    if (!request) {
+      throw new BadRequestError('Delivery request not found');
+    }
+
+    if (request.status !== 'PENDING') {
+      throw new BadRequestError(`This delivery request is already ${request.status.toLowerCase()}`);
     }
 
     // Use transaction to ensure no double assignment
@@ -367,12 +409,16 @@ export class DeliveryService {
           driverId: partnerId,
           status: 'ASSIGNED'
         },
-        include: { driver: true }
+        include: { driver: true, branch: true }
       });
       
-      // Mark other pending requests for this order as rejected
+      // Mark any other pending requests for this order as rejected
       await tx.deliveryRequest.updateMany({
-        where: { orderId: request.orderId, status: 'PENDING' },
+        where: { 
+          orderId: request.orderId, 
+          status: 'PENDING',
+          id: { not: requestId }
+        },
         data: { status: 'REJECTED' }
       });
 
@@ -380,8 +426,8 @@ export class DeliveryService {
       await tx.notification.create({
         data: {
           role: 'ADMIN',
-          title: 'Delivery Assigned',
-          message: `Delivery Partner ${order.driver?.name} accepted Order ${order.id}.`
+          title: 'Delivery Request Accepted',
+          message: `Delivery Partner ${order.driver?.name || 'Partner'} accepted Order #${order.id}. Order is now ASSIGNED.`
         }
       });
       
@@ -390,10 +436,27 @@ export class DeliveryService {
   }
 
   static async rejectDeliveryRequest(requestId: string, partnerId: string) {
-    return prisma.deliveryRequest.update({
+    const request = await prisma.deliveryRequest.findUnique({
+      where: { id: requestId },
+      include: { partner: true }
+    });
+
+    const updated = await prisma.deliveryRequest.update({
       where: { id: requestId },
       data: { status: 'REJECTED' }
     });
+
+    if (request) {
+      await prisma.notification.create({
+        data: {
+          role: 'ADMIN',
+          title: 'Delivery Request Declined',
+          message: `Delivery Partner ${request.partner?.name || 'Partner'} declined Order #${request.orderId}. Admin may assign another partner.`
+        }
+      });
+    }
+
+    return updated;
   }
 
   static async getPendingRequests(partnerId: string) {

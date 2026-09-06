@@ -87,11 +87,11 @@ export class DeliveryController {
 
   static async getPendingRequests(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const partnerId = req.user?.id;
-      if (!partnerId) {
+      const userId = req.user?.id;
+      if (!userId) {
         return res.status(401).json({ success: false, message: 'Authentication required' });
       }
-      const partner = await DeliveryService.getPartnerById(partnerId);
+      const partner = await DeliveryService.getPartnerByUserId(userId);
       const requests = await DeliveryService.getPendingRequests(partner?.id || '');
       res.status(200).json({ success: true, data: requests });
     } catch (error) {
@@ -102,9 +102,10 @@ export class DeliveryController {
   static async acceptRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const requestId = req.params.id as string;
-      const partnerId = req.user?.id;
-      const partner = await DeliveryService.getPartnerById(partnerId || '');
-      const order = await DeliveryService.acceptDeliveryRequest(requestId, partner?.id || '');
+      const userId = req.user?.id;
+      const partner = await DeliveryService.getPartnerByUserId(userId || '');
+      if (!partner) throw new Error('Partner profile not found for this user');
+      const order = await DeliveryService.acceptDeliveryRequest(requestId, partner.id);
       res.status(200).json({ success: true, message: 'Request accepted', data: order });
     } catch (error) {
       next(error);
@@ -114,9 +115,10 @@ export class DeliveryController {
   static async rejectRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const requestId = req.params.id as string;
-      const partnerId = req.user?.id;
-      const partner = await DeliveryService.getPartnerById(partnerId || '');
-      await DeliveryService.rejectDeliveryRequest(requestId, partner?.id || '');
+      const userId = req.user?.id;
+      const partner = await DeliveryService.getPartnerByUserId(userId || '');
+      if (!partner) throw new Error('Partner profile not found for this user');
+      await DeliveryService.rejectDeliveryRequest(requestId, partner.id);
       res.status(200).json({ success: true, message: 'Request rejected' });
     } catch (error) {
       next(error);
